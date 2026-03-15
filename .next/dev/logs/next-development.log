@@ -1,0 +1,173 @@
+[00:00:02.151] Server  LOG     ✓ Ready in 1564ms
+[00:00:13.156] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:00:28.883] Server  LOG     ✓ Compiled in 408ms
+[00:00:46.607] Server  LOG     ✓ Compiled in 1533ms
+[00:01:28.805] Server  LOG     ✓ Compiled in 585ms
+[00:02:07.059] Server  LOG     ✓ Compiled in 687ms
+[00:11:31.476] Server  LOG     ✓ Compiled in 31ms
+[00:11:59.284] Server  LOG     ✓ Compiled in 291ms
+[00:12:05.242] Server  LOG     ✓ Compiled in 243ms
+[00:12:11.297] Server  LOG     ✓ Compiled in 148ms
+[00:12:18.232] Server  LOG     ✓ Compiled in 482ms
+[00:12:30.293] Server  LOG     ✓ Compiled in 405ms
+[00:12:38.514] Server  LOG     ✓ Compiled in 384ms
+[00:12:49.671] Server  LOG     ✓ Compiled in 418ms
+[00:12:59.678] Server  LOG     ✓ Compiled in 271ms
+[00:13:08.859] Server  LOG     ✓ Compiled in 241ms
+[00:13:18.109] Server  LOG     ✓ Compiled in 256ms
+[00:13:26.660] Server  LOG     ✓ Compiled in 267ms
+[00:13:41.745] Server  LOG     ✓ Compiled in 330ms
+[00:13:54.741] Server  LOG     ✓ Compiled in 70ms
+[00:24:26.153] Server  LOG     ✓ Compiled in 31ms
+[00:24:36.708] Server  LOG     ✓ Compiled in 30ms
+[00:24:41.752] Server  LOG     ✓ Compiled in 30ms
+[00:25:09.631] Server  LOG     ✓ Compiled in 27ms
+[00:25:16.741] Server  LOG     ✓ Compiled in 29ms
+[00:25:26.882] Server  LOG     ✓ Compiled in 282ms
+[00:25:47.750] Server  LOG     ✓ Compiled in 361ms
+[00:25:53.879] Server  LOG     ✓ Compiled in 342ms
+[00:26:08.776] Server  LOG     ✓ Compiled in 365ms
+[00:26:19.428] Server  LOG     ✓ Compiled in 365ms
+[00:26:25.957] Server  LOG     ✓ Compiled in 391ms
+[00:26:38.311] Server  LOG     ✓ Compiled in 416ms
+[00:26:44.617] Server  LOG     ✓ Compiled in 409ms
+[00:26:53.387] Server  LOG     ✓ Compiled in 384ms
+[00:27:30.050] Server  LOG     ✓ Compiled in 552ms
+[00:28:12.753] Server  LOG     ✓ Compiled in 42ms
+[00:28:19.549] Server  LOG     ✓ Compiled in 36ms
+[00:32:53.599] Server  LOG     ✓ Compiled in 122ms
+[00:41:35.676] Server  LOG     ✓ Compiled in 66ms
+[00:41:42.442] Server  LOG     ✓ Compiled in 400ms
+[00:41:52.267] Server  LOG     ✓ Compiled in 559ms
+[00:42:12.293] Server  LOG     ✓ Compiled in 387ms
+[00:42:33.229] Server  LOG     ✓ Compiled in 339ms
+[00:42:58.177] Server  LOG     ✓ Compiled in 356ms
+[06:16:38.474] Server  LOG     ✓ Compiled in 38ms
+[06:18:11.179] Server  LOG     ✓ Compiled in 30ms
+[06:18:16.474] Server  LOG     ✓ Compiled in 29ms
+[06:18:21.442] Server  LOG     ✓ Compiled in 39ms
+[06:18:30.436] Server  LOG     ✓ Compiled in 63ms
+[06:18:34.295] Server  LOG     ✓ Compiled in 350ms
+[06:18:39.313] Server  LOG     ✓ Compiled in 339ms
+[06:18:49.937] Server  LOG     ✓ Compiled in 567ms
+[06:18:50.218] Server  LOG     ✓ Compiled in 57ms
+[06:18:55.730] Server  LOG     ✓ Compiled in 32ms
+[06:19:00.789] Server  LOG     ✓ Compiled in 29ms
+[06:19:05.611] Server  LOG     ✓ Compiled in 46ms
+[06:19:10.708] Server  LOG     ✓ Compiled in 44ms
+[06:19:16.484] Server  LOG     ✓ Compiled in 33ms
+[06:19:21.581] Server  LOG     ✓ Compiled in 35ms
+[06:19:22.469] Server  LOG     ✓ Compiled in 30ms
+[06:19:30.335] Server  LOG     ✓ Compiled in 26ms
+[06:19:39.728] Server  LOG     ✓ Compiled in 46ms
+[06:19:45.384] Server  LOG     ✓ Compiled in 37ms
+[06:19:50.874] Server  LOG     ✓ Compiled in 31ms
+[06:19:58.054] Server  LOG     ✓ Compiled in 31ms
+[06:20:03.060] Server  LOG     ✓ Compiled in 32ms
+[06:20:09.456] Server  LOG     ✓ Compiled in 30ms
+[06:20:12.081] Server  LOG     ✓ Compiled in 29ms
+[06:20:14.605] Server  LOG     ✓ Compiled in 38ms
+[06:20:19.411] Server  LOG     ✓ Compiled in 28ms
+[06:20:29.770] Server  LOG     ✓ Compiled in 34ms
+[06:20:44.206] Server  LOG     ✓ Compiled in 478ms
+[06:21:16.496] Server  LOG     ✓ Compiled in 35ms
+[06:21:39.449] Server  LOG     ✓ Compiled in 322ms
+[06:22:03.148] Browser ERROR   A props object containing a "key" prop is being spread into JSX:
+  let props = %s;
+  <%s {...props} />
+React keys must be passed directly to JSX without using spread:
+  let props = %s;
+  <%s key={someKey} {...props} /> {key: someKey, resource: ..., onEdit: ..., onDelete: ...} LinkCard {resource: ..., onEdit: ..., onDelete: ...} LinkCard
+[06:22:19.719] Browser ERROR   A props object containing a "key" prop is being spread into JSX:
+  let props = %s;
+  <%s {...props} />
+React keys must be passed directly to JSX without using spread:
+  let props = %s;
+  <%s key={someKey} {...props} /> {key: someKey, resource: ..., onEdit: ..., onDelete: ...} AssetCard {resource: ..., onEdit: ..., onDelete: ...} AssetCard
+[06:22:44.953] Browser ERROR   A props object containing a "key" prop is being spread into JSX:
+  let props = %s;
+  <%s {...props} />
+React keys must be passed directly to JSX without using spread:
+  let props = %s;
+  <%s key={someKey} {...props} /> {key: someKey, resource: ..., onEdit: ..., onDelete: ...} CredentialCard {resource: ..., onEdit: ..., onDelete: ...} CredentialCard
+[06:23:41.521] Server  LOG     ✓ Compiled in 734ms
+[06:23:59.367] Server  LOG     ✓ Compiled in 628ms
+[06:24:06.815] Server  LOG     ✓ Compiled in 592ms
+[06:24:14.458] Server  LOG     ✓ Compiled in 575ms
+[06:24:35.513] Server  LOG     ✓ Compiled in 94ms
+[06:24:45.588] Server  LOG     ✓ Compiled in 584ms
+[06:30:10.624] Server  LOG     ✓ Compiled in 34ms
+[06:30:41.016] Server  LOG     ✓ Compiled in 35ms
+[06:30:45.951] Server  LOG     ✓ Compiled in 32ms
+[06:30:53.795] Server  LOG     ✓ Compiled in 146ms
+[06:30:59.230] Server  LOG     ✓ Compiled in 93ms
+[06:31:04.258] Server  LOG     ✓ Compiled in 93ms
+[06:31:18.336] Server  LOG     ✓ Compiled in 34ms
+[06:31:24.201] Server  LOG     ✓ Compiled in 49ms
+[06:32:36.917] Server  LOG     ✓ Compiled in 328ms
+[06:32:53.889] Server  LOG     ✓ Compiled in 624ms
+[06:32:54.106] Browser ERROR   The result of getSnapshot should be cached to avoid an infinite loop
+[06:32:54.106] Browser ERROR   uncaughtError: Error: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+[06:33:05.459] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[06:33:21.708] Browser ERROR   The result of getSnapshot should be cached to avoid an infinite loop
+[06:33:21.708] Browser ERROR   uncaughtError: Error: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+[06:33:24.248] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[06:33:40.015] Server  LOG     ✓ Compiled in 743ms
+[06:33:52.294] Server  LOG     ✓ Compiled in 652ms
+[06:34:02.162] Server  LOG     ✓ Compiled in 609ms
+[06:34:11.009] Server  LOG     ✓ Compiled in 339ms
+[06:34:40.657] Server  LOG     ✓ Compiled in 132ms
+[06:34:45.165] Server  LOG     ✓ Compiled in 147ms
+[06:34:58.674] Server  LOG     ✓ Compiled in 372ms
+[06:35:02.512] Browser ERROR   The result of getSnapshot should be cached to avoid an infinite loop
+[06:35:02.512] Browser ERROR   uncaughtError: Error: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+[06:35:16.213] Server  WARN    ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+[06:35:16.406] Server  LOG     ✓ Compiled in 407ms
+[06:35:16.420] Browser ERROR   uncaughtError: Error: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+[06:35:16.524] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[06:35:46.849] Browser ERROR   The result of getSnapshot should be cached to avoid an infinite loop
+[06:35:46.849] Browser ERROR   uncaughtError: Error: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+[06:36:04.495] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[06:36:17.584] Browser ERROR   The result of getSnapshot should be cached to avoid an infinite loop
+[06:36:17.584] Browser ERROR   uncaughtError: Error: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+[06:36:52.820] Server  WARN    ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+[06:36:53.026] Server  LOG     ✓ Compiled in 40ms
+[06:36:53.130] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[06:37:10.041] Server  LOG     ✓ Compiled in 486ms
+[06:37:16.773] Browser ERROR   uncaughtError: TypeError: s_4.getPendingRequests is not a function
+[06:37:19.294] Server  WARN    ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+[06:37:19.475] Server  LOG     ✓ Compiled in 414ms
+[06:37:19.572] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[06:50:33.970] Server  LOG     ✓ Compiled in 37ms
+[06:51:57.789] Server  LOG     ✓ Compiled in 57ms
+[06:52:15.425] Server  LOG     ✓ Compiled in 406ms
+[06:52:22.724] Server  LOG     ✓ Compiled in 529ms
+[06:57:26.837] Server  LOG     ✓ Compiled in 33ms
+[06:57:34.001] Server  LOG     ✓ Compiled in 32ms
+[06:57:45.004] Server  LOG     ✓ Compiled in 30ms
+[06:57:54.180] Server  LOG     ✓ Compiled in 35ms
+[06:57:54.417] Browser ERROR   uncaughtError: TypeError: Cannot read properties of undefined (reading 'length')
+[06:58:27.336] Server  WARN    ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+[06:58:27.536] Server  LOG     ✓ Compiled in 211ms
+[06:58:27.649] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[06:58:33.816] Server  LOG     ✓ Compiled in 184ms
+[06:58:53.453] Server  LOG     ✓ Compiled in 306ms
+[06:59:01.979] Server  LOG     ✓ Compiled in 309ms
+[06:59:11.998] Server  LOG     ✓ Compiled in 305ms
+[06:59:32.397] Server  LOG     ✓ Compiled in 153ms
+[06:59:59.048] Server  LOG     ✓ Compiled in 376ms
+[07:00:08.841] Server  LOG     ✓ Compiled in 523ms
+[07:00:16.855] Server  LOG     ✓ Compiled in 520ms
+[07:01:26.684] Server  LOG     ✓ Compiled in 573ms
+[07:01:56.632] Server  LOG     ✓ Compiled in 568ms
+[07:05:21.296] Server  LOG     ✓ Compiled in 70ms
+[07:05:31.105] Server  LOG     ✓ Compiled in 55ms
+[07:05:58.552] Server  LOG     ✓ Compiled in 722ms
+[07:06:04.895] Server  LOG     ✓ Compiled in 446ms
+[07:16:46.893] Server  LOG     ✓ Compiled in 169ms
+[07:18:51.541] Server  LOG     ✓ Compiled in 102ms
+[07:19:04.751] Server  LOG     ✓ Compiled in 451ms
+[07:19:12.590] Server  LOG     ✓ Compiled in 890ms
+[07:20:12.377] Server  LOG     ✓ Compiled in 1030ms
+[07:24:02.567] Server  LOG     ✓ Compiled in 973ms
+[07:27:00.616] Server  LOG     ✓ Compiled in 149ms
