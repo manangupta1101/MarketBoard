@@ -1,3 +1,0 @@
-module.exports=[90430,a=>{"use strict";var b=a.i(7997);function c({children:a}){return(0,b.jsxs)("div",{className:"flex min-h-screen items-center justify-center bg-[var(--background)]",children:[(0,b.jsx)("div",{className:"pointer-events-none absolute inset-0 overflow-hidden",children:(0,b.jsx)("div",{className:"absolute inset-0 opacity-[0.03]",style:{backgroundImage:"radial-gradient(circle at 1px 1px, var(--text-primary) 1px, transparent 0)",backgroundSize:"24px 24px"}})}),(0,b.jsx)("div",{className:"relative z-10 w-full px-4 py-8",children:a})]})}a.s(["default",()=>c])}];
-
-//# sourceMappingURL=src_app_%28auth%29_layout_tsx_92f1b6d4._.js.map

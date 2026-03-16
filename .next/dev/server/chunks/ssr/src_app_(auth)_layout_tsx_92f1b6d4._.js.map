@@ -1,6 +1,0 @@
-{
-  "version": 3,
-  "sources": [],
-  "sections": [
-    {"offset": {"line": 4, "column": 0}, "map": {"version":3,"sources":["file:///C:/Users/MANAN/Projects/Marketing%20Track%20Board/src/app/%28auth%29/layout.tsx"],"sourcesContent":["import type { ReactNode } from 'react';\n\nexport default function AuthLayout({ children }: { children: ReactNode }) {\n  return (\n    <div className=\"flex min-h-screen items-center justify-center bg-[var(--background)]\">\n      {/* Subtle background pattern */}\n      <div className=\"pointer-events-none absolute inset-0 overflow-hidden\">\n        <div\n          className=\"absolute inset-0 opacity-[0.03]\"\n          style={{\n            backgroundImage: `radial-gradient(circle at 1px 1px, var(--text-primary) 1px, transparent 0)`,\n            backgroundSize: '24px 24px',\n          }}\n        />\n      </div>\n\n      <div className=\"relative z-10 w-full px-4 py-8\">\n        {children}\n      </div>\n    </div>\n  );\n}\n"],"names":[],"mappings":";;;;;;AAEe,SAAS,WAAW,EAAE,QAAQ,EAA2B;IACtE,qBACE,8OAAC;QAAI,WAAU;;0BAEb,8OAAC;gBAAI,WAAU;0BACb,cAAA,8OAAC;oBACC,WAAU;oBACV,OAAO;wBACL,iBAAiB,CAAC,0EAA0E,CAAC;wBAC7F,gBAAgB;oBAClB;;;;;;;;;;;0BAIJ,8OAAC;gBAAI,WAAU;0BACZ;;;;;;;;;;;;AAIT"}}]
-}
