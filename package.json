@@ -6,9 +6,29 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "postinstall": "node scripts/fix-tiptap.js"
   },
   "dependencies": {
+    "@blocknote/core": "^0.47.1",
+    "@blocknote/mantine": "^0.47.1",
+    "@blocknote/react": "^0.47.1",
+    "@mantine/core": "^8.3.17",
+    "@supabase/ssr": "^0.9.0",
+    "@supabase/supabase-js": "^2.99.2",
+    "@tiptap/core": "3.13.0",
+    "@tiptap/extension-bold": "3.13.0",
+    "@tiptap/extension-code": "3.13.0",
+    "@tiptap/extension-horizontal-rule": "3.13.0",
+    "@tiptap/extension-italic": "3.13.0",
+    "@tiptap/extension-link": "3.13.0",
+    "@tiptap/extension-paragraph": "3.13.0",
+    "@tiptap/extension-strike": "3.13.0",
+    "@tiptap/extension-text": "3.13.0",
+    "@tiptap/extension-underline": "3.13.0",
+    "@tiptap/extensions": "3.13.0",
+    "@tiptap/pm": "3.13.0",
+    "@tiptap/react": "3.13.0",
     "next": "16.1.6",
     "react": "19.2.3",
     "react-dom": "19.2.3",
@@ -23,6 +43,7 @@
     "babel-plugin-react-compiler": "1.0.0",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
+    "pg": "^8.20.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
