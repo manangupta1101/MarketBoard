@@ -1,333 +1,415 @@
 import { create } from 'zustand';
+import { createClient } from '@/lib/supabase/client';
 import type {
   CreativeRequest,
   RequestStatus,
-  RequestType,
-  RequestPriority,
   RequestComment,
-  REQUEST_STATUS_ORDER,
+  ReEditEntry,
+  ReEditRequest,
 } from '@/types';
 
 interface RequestState {
   requests: CreativeRequest[];
-  addRequest: (request: CreativeRequest) => void;
-  updateRequest: (id: string, updates: Partial<CreativeRequest>) => void;
-  moveForward: (id: string) => void;
-  moveToStatus: (id: string, status: RequestStatus) => void;
-  assignRequest: (id: string, assigneeId: string, assigneeName: string) => void;
-  addComment: (requestId: string, comment: RequestComment) => void;
-  deleteRequest: (id: string, deletedById: string, deletedByName: string, reason: string) => void;
+  isLoaded: boolean;
+
+  /** Fetch all requests with their comments, re-edits, and re-edit requests */
+  fetchRequests: () => Promise<void>;
+  addRequest: (request: CreativeRequest) => Promise<void>;
+  updateRequest: (id: string, updates: Partial<CreativeRequest>) => Promise<void>;
+  moveForward: (id: string) => Promise<void>;
+  moveBackward: (id: string, reEdit?: ReEditEntry) => Promise<void>;
+  moveToStatus: (id: string, status: RequestStatus) => Promise<void>;
+  assignRequest: (id: string, assigneeId: string, assigneeName: string) => Promise<void>;
+  addComment: (requestId: string, comment: RequestComment) => Promise<void>;
+  deleteRequest: (id: string, deletedById: string, deletedByName: string, reason: string) => Promise<void>;
+  requestReEdit: (requestId: string, reEditRequest: ReEditRequest) => Promise<void>;
+  approveReEditRequest: (requestId: string, reEditRequestId: string, reEdit: ReEditEntry) => Promise<void>;
+  rejectReEditRequest: (requestId: string, reEditRequestId: string) => Promise<void>;
   getRequestsByStatus: (status: RequestStatus) => CreativeRequest[];
   getRequestsByAssignee: (assigneeId: string) => CreativeRequest[];
   getRequestsByRequester: (requesterId: string) => CreativeRequest[];
+  /** Subscribe to realtime changes on requests */
+  subscribeRealtime: () => () => void;
 }
 
 const STATUS_ORDER: RequestStatus[] = ['open', 'in_progress', 'review', 'closed'];
 
-// Realistic mock data matching the screenshots
-type MockRequestData = Omit<CreativeRequest, 'totalItems' | 'dueDate' | 'finalLink' | 'deletedById' | 'deletedByName' | 'deletedAt' | 'deletionReason'>;
+/** Map a DB row + related data into a CreativeRequest */
+const mapDbRequest = (
+  row: Record<string, unknown>,
+  comments: RequestComment[],
+  reEdits: ReEditEntry[],
+  reEditRequests: ReEditRequest[],
+  profiles: Record<string, { full_name: string; email: string }>
+): CreativeRequest => {
+  const requesterProfile = profiles[row.requester_id as string];
+  const assigneeProfile = row.assignee_id ? profiles[row.assignee_id as string] : null;
+  const teamLeadProfile = row.team_lead_id ? profiles[row.team_lead_id as string] : null;
+  const deletedByProfile = row.deleted_by_id ? profiles[row.deleted_by_id as string] : null;
 
-const MOCK_REQUEST_DATA: MockRequestData[] = [
-  // Open
-  {
-    id: 'r1', title: 'Axis CBG Ads Reel 5', description: 'Ads reel 5', type: 'video',
-    priority: 'high', status: 'open',
-    requesterId: 'u3', requesterName: 'Priyanshu Khandelwal', requesterEmail: 'priyanshu.khandelwal@adda247.com',
-    assigneeId: null, assigneeName: null,
-    teamLeadId: null, teamLeadName: null, teamLeadEmail: null,
-    referenceLinks: [
-      'https://drive.google.com/drive/folders/1Bsbsd_in1FUQuYdMppk0YpvpkoTQVeO?usp=drive_link',
-      'https://docs.google.com/document/d/1BHl8DI-8GyCIdamBrMbRb05lHWjTJiiaAZgcravz19A/edit?usp=sharing',
-    ],
-    comments: [{ id: 'c1', authorId: 'u3', authorName: 'Priyanshu Khandelwal', content: 'Please prioritize this one', createdAt: '2026-02-25T10:00:00Z' }],
-    createdAt: '2026-02-25T09:00:00Z',
-  },
-  {
-    id: 'r2', title: 'Axis CBG Ads Reel 4', description: 'Ads reel 4', type: 'video',
-    priority: 'high', status: 'open',
-    requesterId: 'u3', requesterName: 'Priyanshu Khandelwal', requesterEmail: 'priyanshu.khandelwal@adda247.com',
-    assigneeId: null, assigneeName: null,
-    teamLeadId: null, teamLeadName: null, teamLeadEmail: null,
-    referenceLinks: [], comments: [], createdAt: '2026-02-24T09:00:00Z',
-  },
-  {
-    id: 'r3', title: 'Axis CBG Ads Reel 3', description: 'Ads reel 3', type: 'video',
-    priority: 'high', status: 'open',
-    requesterId: 'u3', requesterName: 'Priyanshu Khandelwal', requesterEmail: 'priyanshu.khandelwal@adda247.com',
-    assigneeId: null, assigneeName: null,
-    teamLeadId: null, teamLeadName: null, teamLeadEmail: null,
-    referenceLinks: [], comments: [], createdAt: '2026-02-23T09:00:00Z',
-  },
-  {
-    id: 'r4', title: 'Axis Bank ABYB Ads Reel 4', description: 'ads reel 4', type: 'video',
-    priority: 'high', status: 'open',
-    requesterId: 'u3', requesterName: 'Priyanshu Khandelwal', requesterEmail: 'priyanshu.khandelwal@adda247.com',
-    assigneeId: null, assigneeName: null,
-    teamLeadId: null, teamLeadName: null, teamLeadEmail: null,
-    referenceLinks: [], comments: [], createdAt: '2026-02-22T09:00:00Z',
-  },
-  // Review
-  {
-    id: 'r5', title: 'Carousel - 2026', description: 'Deloitte is Hiring Interns', type: 'design_graphics',
-    priority: 'urgent', status: 'review',
-    requesterId: 'u2', requesterName: 'Akshata Jadhav', requesterEmail: 'akshata.jadhav@adda247.com',
-    assigneeId: 'u6', assigneeName: 'Akasthiyan Ramachandran',
-    teamLeadId: null, teamLeadName: null, teamLeadEmail: null,
-    referenceLinks: [], comments: [], createdAt: '2026-03-11T09:00:00Z',
-  },
-  {
-    id: 'r6', title: 'Offcampus Reel', description: '.', type: 'video',
-    priority: 'urgent', status: 'review',
-    requesterId: 'u2', requesterName: 'Akshata Jadhav', requesterEmail: 'akshata.jadhav@adda247.com',
-    assigneeId: 'u4', assigneeName: 'Simarpreet Singh',
-    teamLeadId: null, teamLeadName: null, teamLeadEmail: null,
-    referenceLinks: [], comments: [], createdAt: '2026-03-11T10:00:00Z',
-  },
-  {
-    id: 'r7', title: 'Axis Bank ABYB Ads Reel 3', description: 'ads reel 3', type: 'video',
-    priority: 'high', status: 'review',
-    requesterId: 'u3', requesterName: 'Priyanshu Khandelwal', requesterEmail: 'priyanshu.khandelwal@adda247.com',
-    assigneeId: 'u1', assigneeName: 'Manan',
-    teamLeadId: null, teamLeadName: null, teamLeadEmail: null,
-    referenceLinks: [], comments: [], createdAt: '2026-03-10T09:00:00Z',
-  },
-  // Closed
-  {
-    id: 'r8', title: 'IG Live whatsapp image post', description: 'TCS NQT Live Doubt Solving with Mohan Sir (put mine & mohan sir image)', type: 'design_graphics',
-    priority: 'urgent', status: 'closed',
-    requesterId: 'u2', requesterName: 'Akshata Jadhav', requesterEmail: 'akshata.jadhav@adda247.com',
-    assigneeId: 'u5', assigneeName: 'Faizan',
-    teamLeadId: null, teamLeadName: null, teamLeadEmail: null,
-    referenceLinks: [], comments: [], createdAt: '2026-03-10T08:00:00Z',
-  },
-  {
-    id: 'r9', title: 'TCS Reel', description: 'TCS NQT', type: 'video',
-    priority: 'urgent', status: 'closed',
-    requesterId: 'u2', requesterName: 'Akshata Jadhav', requesterEmail: 'akshata.jadhav@adda247.com',
-    assigneeId: 'u1', assigneeName: 'Manan',
-    teamLeadId: null, teamLeadName: null, teamLeadEmail: null,
-    referenceLinks: [], comments: [], createdAt: '2026-03-10T07:00:00Z',
-  },
-  {
-    id: 'r10', title: '2025 - 2026 Account Hiring Carousel', description: 'Hiring Carousel', type: 'design_graphics',
-    priority: 'urgent', status: 'closed',
-    requesterId: 'u2', requesterName: 'Akshata Jadhav', requesterEmail: 'akshata.jadhav@adda247.com',
-    assigneeId: 'u6', assigneeName: 'Akasthiyan Ramachandran',
-    teamLeadId: null, teamLeadName: null, teamLeadEmail: null,
-    referenceLinks: [], comments: [], createdAt: '2026-03-09T09:00:00Z',
-  },
-  {
-    id: 'r11', title: 'Wipro Hiring Static Post', description: 'Wipro mass recruitment drive', type: 'design_graphics',
-    priority: 'high', status: 'closed',
-    requesterId: 'u7', requesterName: 'Sanjay', requesterEmail: 'sanjay.s@adda247.com',
-    assigneeId: 'u5', assigneeName: 'Faizan',
-    teamLeadId: null, teamLeadName: null, teamLeadEmail: null,
-    referenceLinks: [], comments: [], createdAt: '2026-03-08T09:00:00Z',
-  },
-  {
-    id: 'r12', title: 'Infosys Story Ad', description: 'Infosys campus placement story', type: 'design_graphics',
-    priority: 'medium', status: 'closed',
-    requesterId: 'u8', requesterName: 'Janpreet', requesterEmail: 'janpreet.ch@adda247.com',
-    assigneeId: 'u4', assigneeName: 'Simarpreet Singh',
-    teamLeadId: null, teamLeadName: null, teamLeadEmail: null,
-    referenceLinks: [], comments: [], createdAt: '2026-03-07T09:00:00Z',
-  },
-];
-
-// Due dates & item counts for existing requests
-const MOCK_OVERRIDES: Record<string, { totalItems: number; dueDate: string | null }> = {
-  r1: { totalItems: 3, dueDate: '2026-03-10' },   // overdue (open, past due)
-  r2: { totalItems: 2, dueDate: '2026-03-12' },   // overdue (open, past due)
-  r3: { totalItems: 4, dueDate: '2026-03-20' },
-  r4: { totalItems: 2, dueDate: null },
-  r5: { totalItems: 5, dueDate: '2026-03-15' },
-  r6: { totalItems: 1, dueDate: '2026-03-17' },
-  r7: { totalItems: 3, dueDate: '2026-03-16' },
-  r8: { totalItems: 2, dueDate: '2026-03-12' },
-  r9: { totalItems: 1, dueDate: '2026-03-11' },
-  r10: { totalItems: 4, dueDate: '2026-03-10' },
-  r11: { totalItems: 2, dueDate: '2026-03-09' },
-  r12: { totalItems: 3, dueDate: '2026-03-08' },
+  return {
+    id: row.id as string,
+    title: row.title as string,
+    description: row.description as string,
+    type: row.type as CreativeRequest['type'],
+    priority: row.priority as CreativeRequest['priority'],
+    status: row.status as RequestStatus,
+    totalItems: row.total_items as number,
+    dueDate: row.due_date as string | null,
+    requesterId: row.requester_id as string,
+    requesterName: requesterProfile?.full_name ?? '',
+    requesterEmail: requesterProfile?.email ?? '',
+    assigneeId: (row.assignee_id as string) ?? null,
+    assigneeName: assigneeProfile?.full_name ?? null,
+    teamLeadId: (row.team_lead_id as string) ?? null,
+    teamLeadName: teamLeadProfile?.full_name ?? null,
+    teamLeadEmail: teamLeadProfile?.email ?? null,
+    referenceLinks: (row.reference_links as string[]) ?? [],
+    scriptNoteId: row.script_note_id as string | null,
+    finalLink: row.final_link as string | null,
+    comments,
+    reEdits,
+    reEditRequests,
+    isInReEdit: row.is_in_re_edit as boolean,
+    createdAt: row.created_at as string,
+    closedAt: row.closed_at as string | null,
+    deletedById: (row.deleted_by_id as string) ?? null,
+    deletedByName: deletedByProfile?.full_name ?? null,
+    deletedAt: row.deleted_at as string | null,
+    deletionReason: row.deletion_reason as string | null,
+  };
 };
-
-// Generate bulk closed requests to match realistic dashboard data
-// Target: ~78 total (55 design-category, 23 video-category)
-const BULK_REQUESTERS = [
-  { id: 'u2', name: 'Akshata Jadhav', email: 'akshata.jadhav@adda247.com' },
-  { id: 'u9', name: 'Vandana Garg', email: 'vandana.garg@adda247.com' },
-  { id: 'u3', name: 'Priyanshu Khandelwal', email: 'priyanshu.khandelwal@adda247.com' },
-  { id: 'u10', name: 'Mayur Jain', email: 'mayur.jain@adda247.com' },
-  { id: 'u11', name: 'Aditya Roy', email: 'aditya.roy@adda247.com' },
-];
-
-const BULK_ASSIGNEES = [
-  { id: 'u1', name: 'Manan' },
-  { id: 'u4', name: 'Simarpreet Singh' },
-  { id: 'u5', name: 'Faizan' },
-  { id: 'u6', name: 'Akasthiyan Ramachandran' },
-];
-
-const DESIGN_TYPES: RequestType[] = ['design_graphics'];
-const VIDEO_TYPES: RequestType[] = ['video'];
-
-const DESIGN_TITLES = [
-  'Hiring Carousel Post', 'Campus Drive Static', 'Placement Story Ad', 'IG Post Design',
-  'LinkedIn Banner', 'WhatsApp Status Design', 'Offer Letter Template', 'Event Poster',
-  'Webinar Banner', 'Course Promo Static', 'Internship Carousel', 'Job Alert Post',
-  'Success Story Design', 'Testimonial Carousel', 'Workshop Poster', 'Festival Post',
-  'Announcement Static', 'Profile Graphic', 'Infographic Design', 'Newsletter Banner',
-  'Recruitment Drive Post', 'Company Update Static', 'Product Launch Carousel',
-  'Team Spotlight Post', 'Achievement Story', 'Contest Poster', 'Salary Guide Design',
-  'Resume Template', 'Interview Tips Carousel', 'Skills Infographic',
-  'Hackathon Poster', 'Alumni Meet Banner', 'Freshers Guide Post', 'Tech Talk Poster',
-  'Aptitude Tips Carousel', 'Mock Test Promo', 'Coding Challenge Post', 'Live Session Banner',
-  'Placement Stats Infographic', 'Company Review Carousel', 'Salary Hike Post',
-  'WFH Guide Static', 'Referral Bonus Post', 'Job Fair Banner', 'Walk-in Drive Poster',
-  'Campus Ambassador Post', 'Scholarship Carousel', 'Exam Prep Static', 'Study Group Post',
-  'Mentor Connect Poster',
-];
-
-const VIDEO_TITLES = [
-  'Placement Prep Reel', 'TCS Hiring Video', 'Interview Tips Reel', 'Day in Life Video',
-  'Coding Tutorial Reel', 'Resume Tips Video', 'Mock Interview Reel', 'Campus Tour Video',
-  'Success Story Reel', 'Aptitude Tricks Video', 'Company Review Reel', 'Salary Guide Video',
-  'HR Tips Reel', 'GD Prep Video', 'Placement Tips Reel', 'Walk-in Update Video',
-];
-
-const generateBulkRequests = (): MockRequestData[] => {
-  const bulk: MockRequestData[] = [];
-  const priorities: RequestPriority[] = ['urgent', 'high', 'medium', 'low'];
-
-  // Requester distribution weights (Akshata ~45, Vandana ~16, Priyanshu ~3, Mayur ~1, Aditya ~1)
-  const requesterWeights = [45, 16, 3, 1, 1];
-  const requesterPool: typeof BULK_REQUESTERS = [];
-  BULK_REQUESTERS.forEach((req, i) => {
-    for (let j = 0; j < requesterWeights[i]; j++) requesterPool.push(req);
-  });
-
-  // Need 50 design + 16 video = 66 more closed requests
-  let idx = 13;
-
-  // Generate design requests
-  for (let i = 0; i < 50; i++) {
-    const requester = requesterPool[i % requesterPool.length];
-    const assignee = BULK_ASSIGNEES[i % BULK_ASSIGNEES.length];
-    const type = DESIGN_TYPES[i % DESIGN_TYPES.length];
-    const dayOffset = Math.floor(i / 2);
-    const date = new Date('2026-02-12T09:00:00Z');
-    date.setDate(date.getDate() + dayOffset);
-
-    bulk.push({
-      id: `r${idx}`,
-      title: DESIGN_TITLES[i % DESIGN_TITLES.length],
-      description: DESIGN_TITLES[i % DESIGN_TITLES.length],
-      type,
-      priority: priorities[i % priorities.length],
-      status: 'closed',
-      requesterId: requester.id,
-      requesterName: requester.name,
-      requesterEmail: requester.email,
-      assigneeId: assignee.id,
-      assigneeName: assignee.name,
-      teamLeadId: null, teamLeadName: null, teamLeadEmail: null,
-      referenceLinks: [],
-      comments: [],
-      createdAt: date.toISOString(),
-    });
-    idx++;
-  }
-
-  // Generate video requests
-  for (let i = 0; i < 16; i++) {
-    const requester = requesterPool[i % requesterPool.length];
-    const assignee = BULK_ASSIGNEES[i % BULK_ASSIGNEES.length];
-    const type = VIDEO_TYPES[i % VIDEO_TYPES.length];
-    const dayOffset = Math.floor(i / 1.5);
-    const date = new Date('2026-02-14T09:00:00Z');
-    date.setDate(date.getDate() + dayOffset);
-
-    bulk.push({
-      id: `r${idx}`,
-      title: VIDEO_TITLES[i % VIDEO_TITLES.length],
-      description: VIDEO_TITLES[i % VIDEO_TITLES.length],
-      type,
-      priority: priorities[i % priorities.length],
-      status: 'closed',
-      requesterId: requester.id,
-      requesterName: requester.name,
-      requesterEmail: requester.email,
-      assigneeId: assignee.id,
-      assigneeName: assignee.name,
-      teamLeadId: null, teamLeadName: null, teamLeadEmail: null,
-      referenceLinks: [],
-      comments: [],
-      createdAt: date.toISOString(),
-    });
-    idx++;
-  }
-
-  return bulk;
-};
-
-const ALL_MOCK_DATA = [...MOCK_REQUEST_DATA, ...generateBulkRequests()];
-
-// Generate due dates for bulk requests (most on time, some late for 11% compliance)
-const generateDueDate = (createdAt: string, status: string, index: number): string | null => {
-  const created = new Date(createdAt);
-  if (status === 'closed') {
-    // ~89% late (miss due date), ~11% on time
-    const daysAfter = index % 9 === 0 ? 5 : -2; // every 9th is on time
-    const due = new Date(created);
-    due.setDate(due.getDate() + daysAfter);
-    return due.toISOString().split('T')[0];
-  }
-  return null;
-};
-
-const MOCK_REQUESTS: CreativeRequest[] = ALL_MOCK_DATA.map((r, i) => ({
-  ...r,
-  totalItems: MOCK_OVERRIDES[r.id]?.totalItems ?? (1 + (i % 4)),
-  dueDate: MOCK_OVERRIDES[r.id]?.dueDate ?? generateDueDate(r.createdAt, r.status, i),
-  finalLink: null,
-  deletedById: null,
-  deletedByName: null,
-  deletedAt: null,
-  deletionReason: null,
-}));
 
 export const useRequestStore = create<RequestState>((set, get) => ({
-  requests: MOCK_REQUESTS,
+  requests: [],
+  isLoaded: false,
 
-  addRequest: (request) => {
+  fetchRequests: async () => {
+    const supabase = createClient();
+
+    // Fetch requests
+    const { data: requestRows, error } = await supabase
+      .from('creative_requests')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error || !requestRows) return;
+
+    if (requestRows.length === 0) {
+      set({ requests: [], isLoaded: true });
+      return;
+    }
+
+    const requestIds = requestRows.map((r) => r.id);
+
+    // Fetch related data in parallel
+    const [commentsRes, reEditsRes, reEditRequestsRes, profilesRes] = await Promise.all([
+      supabase
+        .from('request_comments')
+        .select('*')
+        .in('request_id', requestIds)
+        .order('created_at', { ascending: true }),
+      supabase
+        .from('re_edit_entries')
+        .select('*')
+        .in('request_id', requestIds)
+        .order('created_at', { ascending: true }),
+      supabase
+        .from('re_edit_requests')
+        .select('*')
+        .in('request_id', requestIds)
+        .order('created_at', { ascending: true }),
+      supabase
+        .from('profiles')
+        .select('id, full_name, email'),
+    ]);
+
+    // Build profile lookup
+    const profiles: Record<string, { full_name: string; email: string }> = {};
+    for (const p of profilesRes.data ?? []) {
+      profiles[p.id] = { full_name: p.full_name, email: p.email };
+    }
+
+    // Group comments by request_id
+    const commentsByRequest: Record<string, RequestComment[]> = {};
+    for (const c of commentsRes.data ?? []) {
+      const authorProfile = profiles[c.author_id];
+      const comment: RequestComment = {
+        id: c.id,
+        authorId: c.author_id,
+        authorName: authorProfile?.full_name ?? '',
+        content: c.content,
+        createdAt: c.created_at,
+      };
+      if (!commentsByRequest[c.request_id]) commentsByRequest[c.request_id] = [];
+      commentsByRequest[c.request_id].push(comment);
+    }
+
+    // Group re-edits by request_id
+    const reEditsByRequest: Record<string, ReEditEntry[]> = {};
+    for (const re of reEditsRes.data ?? []) {
+      const creatorProfile = profiles[re.created_by_id];
+      const entry: ReEditEntry = {
+        id: re.id,
+        deadline: re.deadline,
+        comment: re.comment,
+        submittedAt: re.submitted_at,
+        createdAt: re.created_at,
+        createdById: re.created_by_id,
+        createdByName: creatorProfile?.full_name ?? '',
+      };
+      if (!reEditsByRequest[re.request_id]) reEditsByRequest[re.request_id] = [];
+      reEditsByRequest[re.request_id].push(entry);
+    }
+
+    // Group re-edit requests by request_id
+    const reEditRequestsByRequest: Record<string, ReEditRequest[]> = {};
+    for (const req of reEditRequestsRes.data ?? []) {
+      const requesterProfile = profiles[req.requested_by_id];
+      const reEditReq: ReEditRequest = {
+        id: req.id,
+        requestedById: req.requested_by_id,
+        requestedByName: requesterProfile?.full_name ?? '',
+        requestedDate: req.requested_date,
+        comment: req.comment,
+        status: req.status,
+        createdAt: req.created_at,
+      };
+      if (!reEditRequestsByRequest[req.request_id]) reEditRequestsByRequest[req.request_id] = [];
+      reEditRequestsByRequest[req.request_id].push(reEditReq);
+    }
+
+    // Map all requests
+    const requests = requestRows.map((row) =>
+      mapDbRequest(
+        row,
+        commentsByRequest[row.id] ?? [],
+        reEditsByRequest[row.id] ?? [],
+        reEditRequestsByRequest[row.id] ?? [],
+        profiles
+      )
+    );
+
+    set({ requests, isLoaded: true });
+  },
+
+  addRequest: async (request) => {
+    const supabase = createClient();
+
+    const { error } = await supabase.from('creative_requests').insert({
+      id: request.id,
+      title: request.title,
+      description: request.description,
+      type: request.type,
+      priority: request.priority,
+      status: request.status,
+      total_items: request.totalItems,
+      due_date: request.dueDate,
+      requester_id: request.requesterId,
+      assignee_id: request.assigneeId,
+      team_lead_id: request.teamLeadId,
+      reference_links: request.referenceLinks,
+      script_note_id: request.scriptNoteId,
+      final_link: request.finalLink,
+      is_in_re_edit: request.isInReEdit,
+    });
+
+    if (error) {
+      console.error('Failed to add request:', error.message);
+      return;
+    }
+
+    // Optimistic update
     set((state) => ({ requests: [request, ...state.requests] }));
   },
 
-  updateRequest: (id, updates) => {
+  updateRequest: async (id, updates) => {
+    const supabase = createClient();
+
+    // Map camelCase to snake_case for DB
+    const dbUpdates: Record<string, unknown> = {};
+    if (updates.title !== undefined) dbUpdates.title = updates.title;
+    if (updates.description !== undefined) dbUpdates.description = updates.description;
+    if (updates.type !== undefined) dbUpdates.type = updates.type;
+    if (updates.priority !== undefined) dbUpdates.priority = updates.priority;
+    if (updates.status !== undefined) dbUpdates.status = updates.status;
+    if (updates.totalItems !== undefined) dbUpdates.total_items = updates.totalItems;
+    if (updates.dueDate !== undefined) dbUpdates.due_date = updates.dueDate;
+    if (updates.assigneeId !== undefined) dbUpdates.assignee_id = updates.assigneeId;
+    if (updates.teamLeadId !== undefined) dbUpdates.team_lead_id = updates.teamLeadId;
+    if (updates.referenceLinks !== undefined) dbUpdates.reference_links = updates.referenceLinks;
+    if (updates.scriptNoteId !== undefined) dbUpdates.script_note_id = updates.scriptNoteId;
+    if (updates.finalLink !== undefined) dbUpdates.final_link = updates.finalLink;
+    if (updates.isInReEdit !== undefined) dbUpdates.is_in_re_edit = updates.isInReEdit;
+    if (updates.closedAt !== undefined) dbUpdates.closed_at = updates.closedAt;
+    if (updates.deletedById !== undefined) dbUpdates.deleted_by_id = updates.deletedById;
+    if (updates.deletedAt !== undefined) dbUpdates.deleted_at = updates.deletedAt;
+    if (updates.deletionReason !== undefined) dbUpdates.deletion_reason = updates.deletionReason;
+
+    if (Object.keys(dbUpdates).length > 0) {
+      await supabase.from('creative_requests').update(dbUpdates).eq('id', id);
+    }
+
+    // Optimistic update
     set((state) => ({
       requests: state.requests.map((r) => (r.id === id ? { ...r, ...updates } : r)),
     }));
   },
 
-  moveForward: (id) => {
+  moveForward: async (id) => {
+    const request = get().requests.find((r) => r.id === id);
+    if (!request) return;
+
+    const currentIndex = STATUS_ORDER.indexOf(request.status);
+    if (currentIndex >= STATUS_ORDER.length - 1) return;
+
+    const nextStatus = STATUS_ORDER[currentIndex + 1];
+    const supabase = createClient();
+
+    const dbUpdates: Record<string, unknown> = { status: nextStatus };
+
+    // When moving forward to review or closed while in re-edit, mark latest re-edit as submitted
+    if (request.isInReEdit && (nextStatus === 'review' || nextStatus === 'closed')) {
+      dbUpdates.is_in_re_edit = false;
+    }
+
+    // Mark all unsubmitted re-edits as submitted when reaching review or closed
+    if (nextStatus === 'review' || nextStatus === 'closed') {
+      const now = new Date().toISOString();
+      const unsubmittedReEdits = request.reEdits.filter((re) => !re.submittedAt);
+      for (const re of unsubmittedReEdits) {
+        await supabase
+          .from('re_edit_entries')
+          .update({ submitted_at: now })
+          .eq('id', re.id);
+      }
+    }
+
+    if (nextStatus === 'closed') {
+      dbUpdates.closed_at = new Date().toISOString();
+    }
+
+    await supabase.from('creative_requests').update(dbUpdates).eq('id', id);
+
+    // Optimistic update
+    const now = new Date().toISOString();
     set((state) => ({
       requests: state.requests.map((r) => {
         if (r.id !== id) return r;
-        const currentIndex = STATUS_ORDER.indexOf(r.status);
-        if (currentIndex < STATUS_ORDER.length - 1) {
-          return { ...r, status: STATUS_ORDER[currentIndex + 1] };
+        let updatedReEdits = r.reEdits;
+        let updatedIsInReEdit = r.isInReEdit;
+        if (nextStatus === 'review' || nextStatus === 'closed') {
+          updatedReEdits = r.reEdits.map((re) =>
+            !re.submittedAt ? { ...re, submittedAt: now } : re
+          );
+          updatedIsInReEdit = false;
         }
-        return r;
+        return {
+          ...r,
+          status: nextStatus,
+          reEdits: updatedReEdits,
+          isInReEdit: updatedIsInReEdit,
+          closedAt: nextStatus === 'closed' ? now : r.closedAt,
+        };
       }),
     }));
   },
 
-  moveToStatus: (id, status) => {
+  moveBackward: async (id, reEdit) => {
+    const request = get().requests.find((r) => r.id === id);
+    if (!request) return;
+
+    const currentIndex = STATUS_ORDER.indexOf(request.status);
+    if (currentIndex <= 0) return;
+
+    const prevStatus = STATUS_ORDER[currentIndex - 1];
+    const supabase = createClient();
+
+    await supabase.from('creative_requests').update({
+      status: prevStatus,
+      is_in_re_edit: reEdit ? true : request.isInReEdit,
+      closed_at: request.status === 'closed' ? null : request.closedAt,
+    }).eq('id', id);
+
+    if (reEdit) {
+      await supabase.from('re_edit_entries').insert({
+        id: reEdit.id,
+        request_id: id,
+        deadline: reEdit.deadline,
+        comment: reEdit.comment,
+        submitted_at: reEdit.submittedAt,
+        created_by_id: reEdit.createdById,
+      });
+    }
+
     set((state) => ({
-      requests: state.requests.map((r) => (r.id === id ? { ...r, status } : r)),
+      requests: state.requests.map((r) => {
+        if (r.id !== id) return r;
+        return {
+          ...r,
+          status: prevStatus,
+          reEdits: reEdit ? [...r.reEdits, reEdit] : r.reEdits,
+          isInReEdit: reEdit ? true : r.isInReEdit,
+          closedAt: r.status === 'closed' ? null : r.closedAt,
+        };
+      }),
     }));
   },
 
-  assignRequest: (id, assigneeId, assigneeName) => {
+  moveToStatus: async (id, status) => {
+    const request = get().requests.find((r) => r.id === id);
+    const supabase = createClient();
+
+    const dbUpdates: Record<string, unknown> = {
+      status,
+      closed_at: status === 'closed' ? new Date().toISOString() : undefined,
+    };
+
+    if (request?.isInReEdit && (status === 'closed' || status === 'review')) {
+      dbUpdates.is_in_re_edit = false;
+    }
+
+    // Mark all unsubmitted re-edits as submitted when reaching review or closed
+    if (request && (status === 'closed' || status === 'review')) {
+      const now = new Date().toISOString();
+      const unsubmittedReEdits = request.reEdits.filter((re) => !re.submittedAt);
+      for (const re of unsubmittedReEdits) {
+        await supabase
+          .from('re_edit_entries')
+          .update({ submitted_at: now })
+          .eq('id', re.id);
+      }
+    }
+
+    await supabase.from('creative_requests').update(dbUpdates).eq('id', id);
+
+    const now = new Date().toISOString();
+    set((state) => ({
+      requests: state.requests.map((r) => {
+        if (r.id !== id) return r;
+        let updatedReEdits = r.reEdits;
+        let updatedIsInReEdit = r.isInReEdit;
+        if (status === 'closed' || status === 'review') {
+          updatedReEdits = r.reEdits.map((re) =>
+            !re.submittedAt ? { ...re, submittedAt: now } : re
+          );
+          updatedIsInReEdit = false;
+        }
+        return {
+          ...r,
+          status,
+          reEdits: updatedReEdits,
+          isInReEdit: updatedIsInReEdit,
+          closedAt: status === 'closed' ? now : r.closedAt,
+        };
+      }),
+    }));
+  },
+
+  assignRequest: async (id, assigneeId, assigneeName) => {
+    const supabase = createClient();
+    await supabase.from('creative_requests').update({ assignee_id: assigneeId }).eq('id', id);
+
     set((state) => ({
       requests: state.requests.map((r) =>
         r.id === id ? { ...r, assigneeId, assigneeName } : r
@@ -335,7 +417,16 @@ export const useRequestStore = create<RequestState>((set, get) => ({
     }));
   },
 
-  addComment: (requestId, comment) => {
+  addComment: async (requestId, comment) => {
+    const supabase = createClient();
+
+    await supabase.from('request_comments').insert({
+      id: comment.id,
+      request_id: requestId,
+      author_id: comment.authorId,
+      content: comment.content,
+    });
+
     set((state) => ({
       requests: state.requests.map((r) =>
         r.id === requestId ? { ...r, comments: [...r.comments, comment] } : r
@@ -343,7 +434,25 @@ export const useRequestStore = create<RequestState>((set, get) => ({
     }));
   },
 
-  deleteRequest: (id, deletedById, deletedByName, reason) => {
+  deleteRequest: async (id, deletedById, deletedByName, reason) => {
+    const supabase = createClient();
+
+    await supabase.from('creative_requests').update({
+      status: 'deleted',
+      deleted_by_id: deletedById,
+      deleted_at: new Date().toISOString(),
+      deletion_reason: reason,
+    }).eq('id', id);
+
+    // Add deletion comment
+    const commentId = crypto.randomUUID();
+    await supabase.from('request_comments').insert({
+      id: commentId,
+      request_id: id,
+      author_id: deletedById,
+      content: `[Deleted] ${reason}`,
+    });
+
     set((state) => ({
       requests: state.requests.map((r) =>
         r.id === id
@@ -357,13 +466,99 @@ export const useRequestStore = create<RequestState>((set, get) => ({
               comments: [
                 ...r.comments,
                 {
-                  id: `comment_del_${Date.now()}`,
+                  id: commentId,
                   authorId: deletedById,
                   authorName: deletedByName,
                   content: `[Deleted] ${reason}`,
                   createdAt: new Date().toISOString(),
                 },
               ],
+            }
+          : r
+      ),
+    }));
+  },
+
+  requestReEdit: async (requestId, reEditRequest) => {
+    const supabase = createClient();
+
+    await supabase.from('re_edit_requests').insert({
+      id: reEditRequest.id,
+      request_id: requestId,
+      requested_by_id: reEditRequest.requestedById,
+      requested_date: reEditRequest.requestedDate,
+      comment: reEditRequest.comment,
+      status: reEditRequest.status,
+    });
+
+    set((state) => ({
+      requests: state.requests.map((r) =>
+        r.id === requestId
+          ? { ...r, reEditRequests: [...r.reEditRequests, reEditRequest] }
+          : r
+      ),
+    }));
+  },
+
+  approveReEditRequest: async (requestId, reEditRequestId, reEdit) => {
+    const request = get().requests.find((r) => r.id === requestId);
+    if (!request) return;
+
+    const supabase = createClient();
+    const currentIndex = STATUS_ORDER.indexOf(request.status);
+    const prevStatus = currentIndex > 0 ? STATUS_ORDER[currentIndex - 1] : request.status;
+
+    // Update request status
+    if (request.status === 'review' || request.status === 'closed') {
+      await supabase.from('creative_requests').update({
+        status: prevStatus,
+        is_in_re_edit: true,
+        closed_at: request.status === 'closed' ? null : request.closedAt,
+      }).eq('id', requestId);
+    }
+
+    // Add re-edit entry
+    await supabase.from('re_edit_entries').insert({
+      id: reEdit.id,
+      request_id: requestId,
+      deadline: reEdit.deadline,
+      comment: reEdit.comment,
+      submitted_at: reEdit.submittedAt,
+      created_by_id: reEdit.createdById,
+    });
+
+    // Update re-edit request status
+    await supabase.from('re_edit_requests').update({ status: 'approved' }).eq('id', reEditRequestId);
+
+    set((state) => ({
+      requests: state.requests.map((r) => {
+        if (r.id !== requestId) return r;
+        return {
+          ...r,
+          status: (r.status === 'review' || r.status === 'closed') ? prevStatus : r.status,
+          reEdits: [...r.reEdits, reEdit],
+          isInReEdit: true,
+          reEditRequests: r.reEditRequests.map((req) =>
+            req.id === reEditRequestId ? { ...req, status: 'approved' as const } : req
+          ),
+          closedAt: r.status === 'closed' ? null : r.closedAt,
+        };
+      }),
+    }));
+  },
+
+  rejectReEditRequest: async (requestId, reEditRequestId) => {
+    const supabase = createClient();
+    await supabase.from('re_edit_requests').update({ status: 'rejected' }).eq('id', reEditRequestId);
+
+    set((state) => ({
+      requests: state.requests.map((r) =>
+        r.id === requestId
+          ? {
+              ...r,
+              reEditRequests: r.reEditRequests.map((req) =>
+                req.id === reEditRequestId ? { ...req, status: 'rejected' as const } : req
+              ),
             }
           : r
       ),
@@ -380,5 +575,24 @@ export const useRequestStore = create<RequestState>((set, get) => ({
 
   getRequestsByRequester: (requesterId) => {
     return get().requests.filter((r) => r.requesterId === requesterId);
+  },
+
+  subscribeRealtime: () => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel('requests-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'creative_requests' },
+        () => {
+          // Re-fetch all requests on any change (handles complex joins)
+          get().fetchRequests();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   },
 }));

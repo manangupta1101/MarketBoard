@@ -388,6 +388,27 @@ export interface RequestComment {
   createdAt: string;
 }
 
+export interface ReEditEntry {
+  id: string;
+  deadline: string;
+  comment: string | null;
+  submittedAt: string | null;
+  createdAt: string;
+  createdById: string;
+  createdByName: string;
+}
+
+/** Re-edit request submitted by a requester (non-admin) — needs admin approval */
+export interface ReEditRequest {
+  id: string;
+  requestedById: string;
+  requestedByName: string;
+  requestedDate: string;
+  comment: string | null;
+  status: 'pending' | 'approved' | 'rejected';
+  createdAt: string;
+}
+
 export interface CreativeRequest {
   id: string;
   title: string;
@@ -406,9 +427,14 @@ export interface CreativeRequest {
   teamLeadName: string | null;
   teamLeadEmail: string | null;
   referenceLinks: string[];
+  scriptNoteId: string | null;
   finalLink: string | null;
   comments: RequestComment[];
+  reEdits: ReEditEntry[];
+  reEditRequests: ReEditRequest[];
+  isInReEdit: boolean;
   createdAt: string;
+  closedAt: string | null;
   deletedById: string | null;
   deletedByName: string | null;
   deletedAt: string | null;

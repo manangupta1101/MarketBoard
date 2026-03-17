@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { createClient } from '@/lib/supabase/client';
 import type { AppRole, TeamMemberProfile } from '@/types';
 
 interface AuthState {
@@ -6,95 +7,196 @@ interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
-  login: (email: string, password: string) => boolean;
-  signup: (name: string, email: string, password: string) => boolean;
-  logout: () => void;
+
+  /** Initialize auth from Supabase session — call once on app mount */
+  initialize: () => Promise<void>;
+  login: (email: string, password: string) => Promise<boolean>;
+  signup: (name: string, email: string, password: string) => Promise<{ success: boolean; needsVerification: boolean }>;
+  logout: () => Promise<void>;
   clearError: () => void;
+  updateRole: (role: AppRole) => void;
+  /** Reload profile from DB (e.g., after role change) */
+  refreshProfile: () => Promise<void>;
 }
 
-// Mock user database — matches the screenshot team
-const MOCK_USERS: Record<string, { id: string; name: string; role: AppRole; password: string }> = {
-  'manan.gupta@adda247.com': { id: 'u1', name: 'Manan', role: 'owner', password: 'admin123' },
-  'akshata.jadhav@adda247.com': { id: 'u2', name: 'Akshata Jadhav', role: 'admin', password: 'admin123' },
-  'priyanshu.khandelwal@adda247.com': { id: 'u3', name: 'Priyanshu Khandelwal', role: 'editor', password: 'editor123' },
-  'simarpreet.singh@adda247.com': { id: 'u4', name: 'Simarpreet Singh', role: 'editor', password: 'editor123' },
-  'faizan@adda247.com': { id: 'u5', name: 'Faizan', role: 'editor', password: 'editor123' },
-  'akasthiyan.r@adda247.com': { id: 'u6', name: 'Akasthiyan Ramachandran', role: 'editor', password: 'editor123' },
-  'sanjay.s@adda247.com': { id: 'u7', name: 'Sanjay', role: 'member', password: 'member123' },
-  'janpreet.ch@adda247.com': { id: 'u8', name: 'Janpreet', role: 'member', password: 'member123' },
-  'pushpak.pr@adda247.com': { id: 'u9', name: 'Pushpak', role: 'editor', password: 'editor123' },
-  'rejaul.mon@adda247.com': { id: 'u10', name: 'Sheikh Rejaul', role: 'admin', password: 'admin123' },
-};
-
-// Track dynamically signed-up users
-const dynamicUsers: Record<string, { id: string; name: string; role: AppRole; password: string }> = {};
-
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   isAuthenticated: false,
-  isLoading: false,
+  isLoading: true,
   error: null,
 
-  login: (email: string, password: string): boolean => {
-    const lower = email.toLowerCase();
-    const mockUser = MOCK_USERS[lower] || dynamicUsers[lower];
+  initialize: async () => {
+    const supabase = createClient();
+    set({ isLoading: true });
 
-    if (!mockUser) {
-      set({ error: 'No account found with this email' });
+    try {
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+
+      if (!authUser) {
+        set({ user: null, isAuthenticated: false, isLoading: false });
+        return;
+      }
+
+      // Fetch profile from DB
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('id, full_name, email, role')
+        .eq('id', authUser.id)
+        .single();
+
+      if (error || !profile) {
+        set({ user: null, isAuthenticated: false, isLoading: false });
+        return;
+      }
+
+      set({
+        user: {
+          id: profile.id,
+          name: profile.full_name,
+          email: profile.email,
+          role: profile.role as AppRole,
+        },
+        isAuthenticated: true,
+        isLoading: false,
+        error: null,
+      });
+    } catch {
+      set({ user: null, isAuthenticated: false, isLoading: false });
+    }
+  },
+
+  login: async (email: string, password: string): Promise<boolean> => {
+    const supabase = createClient();
+    set({ isLoading: true, error: null });
+
+    // Check if email is blocked (removed from team)
+    const { data: blocked } = await supabase
+      .from('removed_emails')
+      .select('email')
+      .eq('email', email.toLowerCase())
+      .maybeSingle();
+
+    if (blocked) {
+      set({
+        error: 'This account has been removed. Contact your team owner for a re-registration OTP.',
+        isLoading: false,
+      });
       return false;
     }
 
-    if (mockUser.password !== password) {
-      set({ error: 'Incorrect password' });
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error) {
+      set({ error: error.message, isLoading: false });
+      return false;
+    }
+
+    if (!data.user) {
+      set({ error: 'Login failed', isLoading: false });
+      return false;
+    }
+
+    // Fetch profile
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('id, full_name, email, role')
+      .eq('id', data.user.id)
+      .single();
+
+    if (!profile) {
+      set({ error: 'Profile not found', isLoading: false });
       return false;
     }
 
     set({
-      user: { id: mockUser.id, name: mockUser.name, email: lower, role: mockUser.role },
+      user: {
+        id: profile.id,
+        name: profile.full_name,
+        email: profile.email,
+        role: profile.role as AppRole,
+      },
       isAuthenticated: true,
       isLoading: false,
       error: null,
     });
+
     return true;
   },
 
-  signup: (name: string, email: string, password: string): boolean => {
-    const lower = email.toLowerCase();
+  signup: async (
+    name: string,
+    email: string,
+    password: string
+  ): Promise<{ success: boolean; needsVerification: boolean }> => {
+    const supabase = createClient();
+    set({ isLoading: true, error: null });
 
-    if (MOCK_USERS[lower] || dynamicUsers[lower]) {
-      set({ error: 'An account with this email already exists' });
-      return false;
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { full_name: name, role: 'member' },
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
+      },
+    });
+
+    if (error) {
+      set({ error: error.message, isLoading: false });
+      return { success: false, needsVerification: false };
     }
 
-    const newUser = {
-      id: `u_${Date.now()}`,
-      name,
-      role: 'member' as AppRole,
-      password,
-    };
+    set({ isLoading: false, error: null });
 
-    dynamicUsers[lower] = newUser;
+    // If identities is empty, user already exists
+    if (data.user && data.user.identities && data.user.identities.length === 0) {
+      set({ error: 'An account with this email already exists' });
+      return { success: false, needsVerification: false };
+    }
 
-    set({ error: null });
-    return true;
+    // Email confirmation required
+    return { success: true, needsVerification: true };
   },
 
-  logout: () => {
+  logout: async () => {
+    const supabase = createClient();
+    await supabase.auth.signOut();
     set({ user: null, isAuthenticated: false, error: null });
   },
 
   clearError: () => {
     set({ error: null });
   },
-}));
 
-// Export mock users for team store initialization
-export const getMockUsers = (): TeamMemberProfile[] => {
-  const all = { ...MOCK_USERS, ...dynamicUsers };
-  return Object.entries(all).map(([email, u]) => ({
-    id: u.id,
-    name: u.name,
-    email,
-    role: u.role,
-  }));
-};
+  updateRole: (role: AppRole) => {
+    set((state) => {
+      if (!state.user) return state;
+      return { user: { ...state.user, role } };
+    });
+  },
+
+  refreshProfile: async () => {
+    const supabase = createClient();
+    const { data: { user: authUser } } = await supabase.auth.getUser();
+    if (!authUser) return;
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('id, full_name, email, role')
+      .eq('id', authUser.id)
+      .single();
+
+    if (profile) {
+      set({
+        user: {
+          id: profile.id,
+          name: profile.full_name,
+          email: profile.email,
+          role: profile.role as AppRole,
+        },
+      });
+    }
+  },
+}));

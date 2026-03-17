@@ -1,16 +1,20 @@
 import { create } from 'zustand';
+import { createClient } from '@/lib/supabase/client';
 import type { EditorSpecialization, EditorSettings, TeamMemberProfile } from '@/types';
-
-// ============================================
-// TYPES
-// ============================================
 
 interface EditorSettingsState {
   /** Map of editorId → { p1, p2 } specializations */
   settings: Record<string, EditorSettings>;
+  isLoaded: boolean;
+
+  /** Fetch all editor settings from Supabase */
+  fetchSettings: () => Promise<void>;
 
   /** Set P1 or P2 for a given editor */
-  setSpecialization: (editorId: string, priority: 'p1' | 'p2', value: EditorSpecialization) => void;
+  setSpecialization: (editorId: string, priority: 'p1' | 'p2', value: EditorSpecialization) => Promise<void>;
+
+  /** Save both P1 and P2 in a single upsert (avoids race condition) */
+  saveBothSpecializations: (editorId: string, p1: EditorSpecialization, p2: EditorSpecialization) => Promise<void>;
 
   /** Get settings for a specific editor (returns defaults if not set) */
   getEditorSettings: (editorId: string) => EditorSettings;
@@ -20,42 +24,74 @@ interface EditorSettingsState {
 
   /** Get all editors with a specific P1 specialization */
   getEditorsByP1: (p1: EditorSpecialization) => string[];
+
+  /** Subscribe to realtime changes on editor_settings */
+  subscribeRealtime: () => () => void;
 }
 
-// ============================================
-// INITIAL DATA (matches screenshot editors)
-// ============================================
-
-const INITIAL_SETTINGS: Record<string, EditorSettings> = {
-  u3: { editorId: 'u3', p1: 'design', p2: 'none' },
-  u4: { editorId: 'u4', p1: 'video', p2: 'none' },
-  u5: { editorId: 'u5', p1: 'design', p2: 'video' },
-  u6: { editorId: 'u6', p1: 'design', p2: 'none' },
-  u9: { editorId: 'u9', p1: 'video', p2: 'none' },
-  u11: { editorId: 'u11', p1: 'none', p2: 'none' },
-};
-
-// ============================================
-// STORE
-// ============================================
-
 export const useEditorSettingsStore = create<EditorSettingsState>((set, get) => ({
-  settings: INITIAL_SETTINGS,
+  settings: {},
+  isLoaded: false,
 
-  setSpecialization: (editorId, priority, value) => {
-    set((state) => {
-      const current = state.settings[editorId] ?? { editorId, p1: 'none', p2: 'none' };
-      return {
-        settings: {
-          ...state.settings,
-          [editorId]: { ...current, [priority]: value },
-        },
+  fetchSettings: async () => {
+    const supabase = createClient();
+    const { data } = await supabase
+      .from('editor_settings')
+      .select('editor_id, p1, p2');
+
+    if (!data) return;
+
+    const settings: Record<string, EditorSettings> = {};
+    for (const row of data) {
+      settings[row.editor_id] = {
+        editorId: row.editor_id,
+        p1: row.p1 as EditorSpecialization,
+        p2: row.p2 as EditorSpecialization,
       };
+    }
+
+    set({ settings, isLoaded: true });
+  },
+
+  setSpecialization: async (editorId, priority, value) => {
+    const supabase = createClient();
+    const current = get().settings[editorId] ?? { editorId, p1: 'none', p2: 'none' };
+    const updated = { ...current, [priority]: value };
+
+    await supabase.from('editor_settings').upsert({
+      editor_id: editorId,
+      p1: updated.p1,
+      p2: updated.p2,
     });
+
+    set((state) => ({
+      settings: {
+        ...state.settings,
+        [editorId]: updated,
+      },
+    }));
+  },
+
+  saveBothSpecializations: async (editorId, p1, p2) => {
+    const supabase = createClient();
+    const updated: EditorSettings = { editorId, p1, p2 };
+
+    await supabase.from('editor_settings').upsert({
+      editor_id: editorId,
+      p1,
+      p2,
+    });
+
+    set((state) => ({
+      settings: {
+        ...state.settings,
+        [editorId]: updated,
+      },
+    }));
   },
 
   getEditorSettings: (editorId) => {
-    return get().settings[editorId] ?? { editorId, p1: 'none', p2: 'none' };
+    return get().settings[editorId] ?? { editorId, p1: 'none' as EditorSpecialization, p2: 'none' as EditorSpecialization };
   },
 
   syncEditors: (editors) => {
@@ -63,16 +99,14 @@ export const useEditorSettingsStore = create<EditorSettingsState>((set, get) => 
       const editorIds = new Set(editors.map((e) => e.id));
       const updated: Record<string, EditorSettings> = {};
 
-      // Keep existing settings for current editors, add defaults for new ones
       for (const editor of editors) {
         updated[editor.id] = state.settings[editor.id] ?? {
           editorId: editor.id,
-          p1: 'none',
-          p2: 'none',
+          p1: 'none' as EditorSpecialization,
+          p2: 'none' as EditorSpecialization,
         };
       }
 
-      // Only update if there's a difference (avoid unnecessary re-renders)
       const existingIds = Object.keys(state.settings);
       const hasChange =
         existingIds.length !== editorIds.size ||
@@ -87,5 +121,42 @@ export const useEditorSettingsStore = create<EditorSettingsState>((set, get) => 
     return Object.values(allSettings)
       .filter((s) => s.p1 === p1)
       .map((s) => s.editorId);
+  },
+
+  subscribeRealtime: () => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel('editor-settings-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'editor_settings' },
+        (payload) => {
+          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+            const row = payload.new as { editor_id: string; p1: string; p2: string };
+            set((state) => ({
+              settings: {
+                ...state.settings,
+                [row.editor_id]: {
+                  editorId: row.editor_id,
+                  p1: row.p1 as EditorSpecialization,
+                  p2: row.p2 as EditorSpecialization,
+                },
+              },
+            }));
+          } else if (payload.eventType === 'DELETE') {
+            const row = payload.old as { editor_id: string };
+            set((state) => {
+              const updated = { ...state.settings };
+              delete updated[row.editor_id];
+              return { settings: updated };
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   },
 }));

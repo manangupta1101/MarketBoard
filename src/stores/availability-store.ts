@@ -1,18 +1,19 @@
 import { create } from 'zustand';
-import type { AvailabilityEntry, AvailabilityType } from '@/types';
-
-// ============================================
-// TYPES
-// ============================================
+import { createClient } from '@/lib/supabase/client';
+import type { AvailabilityEntry } from '@/types';
 
 interface AvailabilityState {
   entries: AvailabilityEntry[];
+  isLoaded: boolean;
+
+  /** Fetch all availability entries from Supabase */
+  fetchEntries: () => Promise<void>;
 
   /** Add a new availability entry */
-  addEntry: (entry: Omit<AvailabilityEntry, 'id' | 'createdAt'>) => void;
+  addEntry: (entry: Omit<AvailabilityEntry, 'id' | 'createdAt'>) => Promise<void>;
 
   /** Remove an availability entry by id */
-  removeEntry: (id: string) => void;
+  removeEntry: (id: string) => Promise<void>;
 
   /** Get entries for a specific editor */
   getEntriesByEditor: (editorId: string) => AvailabilityEntry[];
@@ -24,11 +25,7 @@ interface AvailabilityState {
   getEntriesForMonth: (year: number, month: number) => AvailabilityEntry[];
 }
 
-// ============================================
-// HELPERS
-// ============================================
-
-const generateId = (): string => `avail_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+const pad = (n: number): string => n.toString().padStart(2, '0');
 
 const dateOverlaps = (entryStart: string, entryEnd: string, checkDate: string): boolean => {
   return checkDate >= entryStart && checkDate <= entryEnd;
@@ -38,77 +35,63 @@ const monthOverlaps = (entryStart: string, entryEnd: string, monthStart: string,
   return entryStart <= monthEnd && entryEnd >= monthStart;
 };
 
-// ============================================
-// SEED DATA (demo entries)
-// ============================================
-
-const today = new Date();
-const year = today.getFullYear();
-const month = today.getMonth();
-
-const pad = (n: number): string => n.toString().padStart(2, '0');
-const makeDate = (y: number, m: number, d: number): string => `${y}-${pad(m + 1)}-${pad(d)}`;
-
-const SEED_ENTRIES: AvailabilityEntry[] = [
-  {
-    id: 'avail_seed_1',
-    editorId: 'u3',
-    startDate: makeDate(year, month, 10),
-    endDate: makeDate(year, month, 12),
-    type: 'unavailable',
-    reason: 'Vacation',
-    createdBy: 'u1',
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 'avail_seed_2',
-    editorId: 'u4',
-    startDate: makeDate(year, month, 18),
-    endDate: makeDate(year, month, 18),
-    type: 'unavailable',
-    reason: 'Personal leave',
-    createdBy: 'u1',
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 'avail_seed_3',
-    editorId: 'u5',
-    startDate: makeDate(year, month, 5),
-    endDate: makeDate(year, month, 5),
-    type: 'partial',
-    reason: 'Doctor appointment',
-    createdBy: 'u2',
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 'avail_seed_4',
-    editorId: 'u9',
-    startDate: makeDate(year, month, 20),
-    endDate: makeDate(year, month, 22),
-    type: 'overtime',
-    reason: 'Project deadline',
-    createdBy: 'u1',
-    createdAt: new Date().toISOString(),
-  },
-];
-
-// ============================================
-// STORE
-// ============================================
-
 export const useAvailabilityStore = create<AvailabilityState>((set, get) => ({
-  entries: SEED_ENTRIES,
+  entries: [],
+  isLoaded: false,
 
-  addEntry: (entry) => {
+  fetchEntries: async () => {
+    const supabase = createClient();
+    const { data } = await supabase
+      .from('availability_entries')
+      .select('*')
+      .order('start_date', { ascending: true });
+
+    if (!data) return;
+
+    const entries: AvailabilityEntry[] = data.map((row) => ({
+      id: row.id,
+      editorId: row.editor_id,
+      startDate: row.start_date,
+      endDate: row.end_date,
+      type: row.type,
+      reason: row.reason,
+      createdBy: row.created_by,
+      createdAt: row.created_at,
+    }));
+
+    set({ entries, isLoaded: true });
+  },
+
+  addEntry: async (entry) => {
+    const supabase = createClient();
+
+    const { data, error } = await supabase.from('availability_entries').insert({
+      editor_id: entry.editorId,
+      start_date: entry.startDate,
+      end_date: entry.endDate,
+      type: entry.type,
+      reason: entry.reason,
+      created_by: entry.createdBy,
+    }).select('id, created_at').single();
+
+    if (error || !data) {
+      console.error('Failed to add availability entry:', error?.message);
+      return;
+    }
+
     const newEntry: AvailabilityEntry = {
       ...entry,
-      id: generateId(),
-      createdAt: new Date().toISOString(),
+      id: data.id,
+      createdAt: data.created_at,
     };
+
     set((state) => ({ entries: [...state.entries, newEntry] }));
   },
 
-  removeEntry: (id) => {
+  removeEntry: async (id) => {
+    const supabase = createClient();
+    await supabase.from('availability_entries').delete().eq('id', id);
+
     set((state) => ({ entries: state.entries.filter((e) => e.id !== id) }));
   },
 
