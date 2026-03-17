@@ -8,62 +8,88 @@ import { Modal } from '@/components/ui/modal';
 import { Divider } from '@/components/ui/divider';
 import { IconContainer } from '@/components/ui/icon-container';
 import { useAuthStore } from '@/stores/auth-store';
+import { createClient } from '@/lib/supabase/client';
 
-type PopupStep = 'none' | 'otp' | 'success';
+type PopupStep = 'none' | 'blocked-otp' | 'check-email';
 
 export default function SignupPage() {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [popupStep, setPopupStep] = useState<PopupStep>('none');
-  const [otp, setOtp] = useState(['', '', '', '', '', '']);
-  const [resendMessage, setResendMessage] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  // Blocked email OTP
+  const [blockedOtp, setBlockedOtp] = useState('');
+  const [blockedOtpError, setBlockedOtpError] = useState('');
 
   const signup = useAuthStore((s) => s.signup);
   const [signupError, setSignupError] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSignupError('');
-    const success = signup(fullName, email, password);
-    if (success) {
-      setPopupStep('otp');
-    } else {
+    setLoading(true);
+
+    // Check if email is blocked (removed from team)
+    const supabase = createClient();
+    const { data: blocked } = await supabase
+      .from('removed_emails')
+      .select('email')
+      .eq('email', email.toLowerCase())
+      .maybeSingle();
+
+    if (blocked) {
+      setPopupStep('blocked-otp');
+      setLoading(false);
+      return;
+    }
+
+    const result = await signup(fullName, email, password);
+    setLoading(false);
+
+    if (result.success && result.needsVerification) {
+      setPopupStep('check-email');
+    } else if (!result.success) {
       setSignupError(useAuthStore.getState().error || 'Signup failed');
     }
   };
 
-  const handleOtpChange = (index: number, value: string) => {
-    if (value.length > 1) return;
-    const newOtp = [...otp];
-    newOtp[index] = value;
-    setOtp(newOtp);
-    if (value && index < 5) {
-      const next = document.getElementById(`otp-${index + 1}`);
-      next?.focus();
+  const handleBlockedOtpVerify = async () => {
+    setLoading(true);
+
+    // Verify OTP against the removed_emails table via an API route
+    const res = await fetch('/api/auth/verify-reregistration', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email.toLowerCase(), otp: blockedOtp.trim() }),
+    });
+
+    const data = await res.json();
+
+    if (data.success) {
+      // OTP verified — proceed with signup
+      const result = await signup(fullName, email, password);
+      setLoading(false);
+
+      if (result.success) {
+        setBlockedOtp('');
+        setBlockedOtpError('');
+        setPopupStep('check-email');
+      } else {
+        setSignupError(useAuthStore.getState().error || 'Signup failed');
+        setPopupStep('none');
+      }
+    } else {
+      setLoading(false);
+      setBlockedOtpError('Invalid OTP. Contact your team owner for the correct code.');
     }
-  };
-
-  const handleOtpKeyDown = (index: number, e: React.KeyboardEvent) => {
-    if (e.key === 'Backspace' && !otp[index] && index > 0) {
-      const prev = document.getElementById(`otp-${index - 1}`);
-      prev?.focus();
-    }
-  };
-
-  const handleVerifyOtp = () => {
-    setPopupStep('success');
-  };
-
-  const handleResendOtp = () => {
-    setResendMessage(true);
-    setTimeout(() => setResendMessage(false), 3000);
   };
 
   const handleClosePopup = () => {
     setPopupStep('none');
-    setOtp(['', '', '', '', '', '']);
-    setResendMessage(false);
+    setBlockedOtp('');
+    setBlockedOtpError('');
   };
 
   return (
@@ -129,13 +155,14 @@ export default function SignupPage() {
             </div>
           )}
 
-          <Button type="submit" fullWidth size="lg">
-            Create account
+          <Button type="submit" fullWidth size="lg" disabled={loading}>
+            {loading ? 'Creating account...' : 'Create account'}
           </Button>
         </form>
 
         <p className="mt-3 text-center text-xs text-[var(--text-tertiary)]">
           New accounts are created with Member role by default.
+          A verification email will be sent to confirm your address.
         </p>
 
         <Divider />
@@ -151,11 +178,77 @@ export default function SignupPage() {
         </p>
       </Card>
 
-      {/* OTP Modal */}
-      <Modal open={popupStep === 'otp'} onClose={handleClosePopup}>
+      {/* Blocked Email OTP Modal */}
+      <Modal open={popupStep === 'blocked-otp'} onClose={handleClosePopup}>
         <div className="mb-4 flex justify-center">
           <IconContainer>
             <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+              />
+            </svg>
+          </IconContainer>
+        </div>
+        <h2 className="mb-1 text-center text-lg font-semibold text-[var(--text-primary)]">
+          Account Previously Removed
+        </h2>
+        <p className="mb-2 text-center text-sm text-[var(--text-secondary)]">
+          This email was removed from the team by an owner. Enter the OTP provided by your team owner to re-register.
+        </p>
+        <p className="mb-4 text-center text-xs text-[var(--text-tertiary)]">
+          Contact your team owner to get the re-registration OTP.
+        </p>
+
+        <input
+          type="text"
+          inputMode="numeric"
+          maxLength={6}
+          value={blockedOtp}
+          onChange={(e) => {
+            setBlockedOtp(e.target.value.replace(/\D/g, ''));
+            setBlockedOtpError('');
+          }}
+          placeholder="Enter 6-digit OTP"
+          className="
+            mb-4 w-full rounded-[var(--radius-md)]
+            border border-[var(--border)] bg-[var(--surface)]
+            px-3 py-2.5 text-center text-lg font-bold tracking-widest
+            text-[var(--text-primary)] outline-none transition-all
+            focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary)]/10
+          "
+          aria-label="Enter re-registration OTP"
+          autoFocus
+        />
+
+        {blockedOtpError && (
+          <p className="mb-3 text-center text-xs font-medium text-[var(--error)]">{blockedOtpError}</p>
+        )}
+
+        <Button
+          onClick={handleBlockedOtpVerify}
+          disabled={blockedOtp.length !== 6 || loading}
+          fullWidth
+        >
+          {loading ? 'Verifying...' : 'Verify & Re-register'}
+        </Button>
+
+        <button
+          type="button"
+          onClick={handleClosePopup}
+          className="mt-3 w-full text-center text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
+        >
+          Cancel
+        </button>
+      </Modal>
+
+      {/* Check Email Modal (real email verification) */}
+      <Modal open={popupStep === 'check-email'} onClose={handleClosePopup}>
+        <div className="mb-4 flex justify-center">
+          <IconContainer size="lg" variant="outlined">
+            <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -165,74 +258,17 @@ export default function SignupPage() {
             </svg>
           </IconContainer>
         </div>
-        <h2 className="mb-1 text-center text-lg font-semibold text-[var(--text-primary)]">
-          Verify your email
-        </h2>
-        <p className="mb-6 text-center text-sm text-[var(--text-secondary)]">
-          We sent a 6-digit code to{' '}
-          <span className="font-medium text-[var(--text-primary)]">{email}</span>
-        </p>
-        <div className="mb-6 flex justify-center gap-2">
-          {otp.map((digit, i) => (
-            <input
-              key={i}
-              id={`otp-${i}`}
-              type="text"
-              inputMode="numeric"
-              maxLength={1}
-              value={digit}
-              onChange={(e) => handleOtpChange(i, e.target.value)}
-              onKeyDown={(e) => handleOtpKeyDown(i, e)}
-              className="
-                h-11 w-11 rounded-[var(--radius-md)]
-                border border-[var(--border)] bg-[var(--surface)]
-                text-center text-lg font-semibold text-[var(--text-primary)]
-                outline-none transition-all
-                focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary)]/10
-              "
-              aria-label={`Digit ${i + 1}`}
-            />
-          ))}
-        </div>
-        <Button
-          onClick={handleVerifyOtp}
-          disabled={otp.some((d) => !d)}
-          fullWidth
-        >
-          Verify code
-        </Button>
-        {resendMessage ? (
-          <p className="mt-4 text-center text-xs font-medium text-[var(--success)]">
-            Code resent successfully!
-          </p>
-        ) : (
-          <p className="mt-4 text-center text-sm text-[var(--text-secondary)]">
-            Didn&apos;t receive a code?{' '}
-            <button
-              type="button"
-              onClick={handleResendOtp}
-              className="font-medium text-[var(--primary)] hover:text-[var(--primary-hover)]"
-            >
-              Resend
-            </button>
-          </p>
-        )}
-      </Modal>
-
-      {/* Success Modal */}
-      <Modal open={popupStep === 'success'} onClose={handleClosePopup}>
-        <div className="mb-4 flex justify-center">
-          <IconContainer size="lg" variant="outlined">
-            <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
-          </IconContainer>
-        </div>
         <h2 className="mb-2 text-center text-lg font-semibold text-[var(--text-primary)]">
-          Account created!
+          Check your email
         </h2>
+        <p className="mb-1 text-center text-sm text-[var(--text-secondary)]">
+          We sent a verification link to
+        </p>
+        <p className="mb-6 text-center text-sm font-medium text-[var(--text-primary)]">
+          {email}
+        </p>
         <p className="mb-6 text-center text-sm text-[var(--text-secondary)]">
-          Your account has been successfully created. Head to login to enter your dashboard.
+          Click the link in the email to verify your account, then come back and sign in.
         </p>
         <Button
           onClick={() => {
@@ -243,6 +279,9 @@ export default function SignupPage() {
         >
           Go to sign in
         </Button>
+        <p className="mt-4 text-center text-xs text-[var(--text-tertiary)]">
+          Didn&apos;t receive it? Check your spam folder.
+        </p>
       </Modal>
     </>
   );

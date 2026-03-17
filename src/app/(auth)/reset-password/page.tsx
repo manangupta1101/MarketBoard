@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
@@ -15,8 +16,9 @@ export default function ResetPasswordPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [reConfirmPassword, setReConfirmPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleResetPassword = (e: React.FormEvent) => {
+  const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
@@ -33,6 +35,20 @@ export default function ResetPasswordPage() {
       return;
     }
 
+    setLoading(true);
+    const supabase = createClient();
+    const { error: updateError } = await supabase.auth.updateUser({
+      password: newPassword,
+    });
+    setLoading(false);
+
+    if (updateError) {
+      setError(updateError.message);
+      return;
+    }
+
+    // Sign out so they log in fresh with the new password
+    await supabase.auth.signOut();
     setStep('success');
   };
 
@@ -137,8 +153,8 @@ export default function ResetPasswordPage() {
           </div>
         )}
 
-        <Button type="submit" fullWidth size="lg">
-          Reset password
+        <Button type="submit" fullWidth size="lg" disabled={loading}>
+          {loading ? 'Updating...' : 'Reset password'}
         </Button>
       </form>
 

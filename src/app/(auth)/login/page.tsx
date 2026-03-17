@@ -9,6 +9,7 @@ import { Modal } from '@/components/ui/modal';
 import { Divider } from '@/components/ui/divider';
 import { IconContainer } from '@/components/ui/icon-container';
 import { useAuthStore } from '@/stores/auth-store';
+import { createClient } from '@/lib/supabase/client';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -19,22 +20,41 @@ export default function LoginPage() {
   const [forgotOpen, setForgotOpen] = useState(false);
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotSent, setForgotSent] = useState(false);
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const [error, setError] = useState('');
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    const success = login(email, password);
+    setLoading(true);
+
+    const success = await login(email, password);
     if (success) {
       router.push('/board');
     } else {
       setError(useAuthStore.getState().error || 'Login failed');
     }
+    setLoading(false);
   };
 
-  const handleSendResetLink = (e: React.FormEvent) => {
+  const handleSendResetLink = async (e: React.FormEvent) => {
     e.preventDefault();
+    setForgotLoading(true);
+
+    const supabase = createClient();
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(forgotEmail, {
+      redirectTo: `${window.location.origin}/auth/callback?next=/board`,
+    });
+
+    setForgotLoading(false);
+
+    if (resetError) {
+      // Still show success to not leak whether email exists
+      console.error('Reset error:', resetError.message);
+    }
+
     setForgotSent(true);
   };
 
@@ -46,9 +66,9 @@ export default function LoginPage() {
 
   return (
     <>
-      <Card className="mx-auto max-w-[400px]">
+      <Card className="mx-auto max-w-[380px]">
         {/* Logo */}
-        <div className="mb-6 flex justify-center">
+        <div className="mb-4 flex justify-center">
           <IconContainer>
             <svg
               className="h-5 w-5"
@@ -66,14 +86,14 @@ export default function LoginPage() {
           </IconContainer>
         </div>
 
-        <h1 className="text-center text-2xl font-semibold tracking-tight text-[var(--text-primary)]">
+        <h1 className="text-center text-xl font-semibold tracking-tight text-[var(--text-primary)]">
           Welcome back
         </h1>
-        <p className="mt-1.5 mb-8 text-center text-sm text-[var(--text-secondary)]">
+        <p className="mt-1 mb-5 text-center text-sm text-[var(--text-secondary)]">
           Sign in to your MarketBoard account
         </p>
 
-        <form onSubmit={handleLogin} className="space-y-4">
+        <form onSubmit={handleLogin} className="space-y-3">
           <Input
             label="Email"
             type="email"
@@ -94,22 +114,15 @@ export default function LoginPage() {
           />
 
           {error && (
-            <div className="rounded-[var(--radius-md)] bg-[var(--error-light)] px-4 py-2.5">
+            <div className="rounded-[var(--radius-md)] bg-[var(--error-light)] px-3 py-2">
               <p className="text-sm text-[var(--error)]">{error}</p>
             </div>
           )}
 
-          <Button type="submit" fullWidth size="lg">
-            Sign in
+          <Button type="submit" fullWidth size="lg" disabled={loading}>
+            {loading ? 'Signing in...' : 'Sign in'}
           </Button>
         </form>
-
-        <div className="mt-3 rounded-[var(--radius-md)] bg-[var(--surface-secondary)] p-3">
-          <p className="mb-1 text-xs font-medium text-[var(--text-secondary)]">Demo accounts:</p>
-          <p className="text-xs text-[var(--text-tertiary)]">Admin: manan.gupta@adda247.com / admin123</p>
-          <p className="text-xs text-[var(--text-tertiary)]">Editor: priyanshu.khandelwal@adda247.com / editor123</p>
-          <p className="text-xs text-[var(--text-tertiary)]">Member: sanjay.s@adda247.com / member123</p>
-        </div>
 
         <button
           type="button"
@@ -117,7 +130,7 @@ export default function LoginPage() {
             setForgotEmail(email);
             setForgotOpen(true);
           }}
-          className="mt-3 w-full text-center text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
+          className="mt-2.5 w-full text-center text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
         >
           Forgot your password?
         </button>
@@ -166,8 +179,8 @@ export default function LoginPage() {
                 required
                 autoFocus
               />
-              <Button type="submit" fullWidth>
-                Send reset link
+              <Button type="submit" fullWidth disabled={forgotLoading}>
+                {forgotLoading ? 'Sending...' : 'Send reset link'}
               </Button>
             </form>
             <button
