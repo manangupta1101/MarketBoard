@@ -66,128 +66,131 @@ export default function LoginPage() {
 
   return (
     <>
-      <Card className="mx-auto max-w-[380px]">
-        {/* Logo */}
-        <div className="mb-4 flex justify-center">
-          <IconContainer>
-            <svg
-              className="h-5 w-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"
-              />
-            </svg>
-          </IconContainer>
+      <div className="flex w-full flex-col items-center gap-6 lg:flex-row lg:items-start lg:justify-center">
+        {/* Demo Credentials — Left side */}
+        <div className="w-full max-w-[320px] shrink-0 rounded-[var(--radius-lg)] border-2 border-dashed border-[var(--border)] bg-[var(--surface-secondary)] p-4 lg:order-1">
+          <p className="mb-3 text-center text-xs font-bold uppercase tracking-wider text-[var(--text-tertiary)]">
+            Demo Credentials
+          </p>
+          <div className="space-y-2">
+            {[
+              { role: 'Owner', email: 'manangupta1101@gmail.com', pass: 'owner123', color: 'var(--primary)' },
+              { role: 'Admin', email: 'manangupta5055@gmail.com', pass: 'admin123', color: 'var(--warning, #f59e0b)' },
+              { role: 'Editor', email: 'manangupta228@gmail.com', pass: 'editor123', color: 'var(--success, #22c55e)' },
+            ].map((cred) => (
+              <button
+                key={cred.role}
+                type="button"
+                onClick={() => {
+                  setEmail(cred.email);
+                  setPassword(cred.pass);
+                }}
+                className="group w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-left transition-all hover:border-[var(--primary)] hover:shadow-sm"
+              >
+                <div className="flex items-center justify-between">
+                  <span
+                    className="rounded-full px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white"
+                    style={{ backgroundColor: cred.color }}
+                  >
+                    {cred.role}
+                  </span>
+                  <span className="text-[11px] text-[var(--text-tertiary)] opacity-0 transition-opacity group-hover:opacity-100">
+                    Click to use
+                  </span>
+                </div>
+                <p className="mt-1.5 text-xs text-[var(--text-secondary)]">
+                  {cred.email}
+                </p>
+                <p className="text-xs text-[var(--text-tertiary)]">
+                  Password: {cred.pass}
+                </p>
+              </button>
+            ))}
+          </div>
         </div>
 
-        <h1 className="text-center text-xl font-semibold tracking-tight text-[var(--text-primary)]">
-          Welcome back
-        </h1>
-        <p className="mt-1 mb-5 text-center text-sm text-[var(--text-secondary)]">
-          Sign in to your MarketBoard account
-        </p>
+        {/* Login Card — Right side */}
+        <Card className="w-full max-w-[380px] lg:order-2">
+          {/* Logo */}
+          <div className="mb-4 flex justify-center">
+            <IconContainer>
+              <svg
+                className="h-5 w-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"
+                />
+              </svg>
+            </IconContainer>
+          </div>
 
-        <form onSubmit={handleLogin} className="space-y-3">
-          <Input
-            label="Email"
-            type="email"
-            placeholder="you@company.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
+          <h1 className="text-center text-xl font-semibold tracking-tight text-[var(--text-primary)]">
+            Welcome back
+          </h1>
+          <p className="mt-1 mb-5 text-center text-sm text-[var(--text-secondary)]">
+            Sign in to your MarketBoard account
+          </p>
 
-          <Input
-            label="Password"
-            type="password"
-            placeholder="Enter your password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            minLength={6}
-          />
+          <form onSubmit={handleLogin} className="space-y-3">
+            <Input
+              label="Email"
+              type="email"
+              placeholder="you@company.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
 
-          {error && (
-            <div className="rounded-[var(--radius-md)] bg-[var(--error-light)] px-3 py-2">
-              <p className="text-sm text-[var(--error)]">{error}</p>
-            </div>
-          )}
+            <Input
+              label="Password"
+              type="password"
+              placeholder="Enter your password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              minLength={6}
+            />
 
-          <Button type="submit" fullWidth size="lg" disabled={loading}>
-            {loading ? 'Signing in...' : 'Sign in'}
-          </Button>
-        </form>
-
-        <button
-          type="button"
-          onClick={() => {
-            setForgotEmail(email);
-            setForgotOpen(true);
-          }}
-          className="mt-2.5 w-full text-center text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
-        >
-          Forgot your password?
-        </button>
-
-        <Divider />
-
-        <p className="text-center text-sm text-[var(--text-secondary)]">
-          Don&apos;t have an account?{' '}
-          <a
-            href="/signup"
-            className="font-medium text-[var(--primary)] transition-colors hover:text-[var(--primary-hover)]"
-          >
-            Sign up
-          </a>
-        </p>
-      </Card>
-
-      {/* Demo Credentials */}
-      <div className="mx-auto mt-4 max-w-[380px] rounded-[var(--radius-lg)] border-2 border-dashed border-[var(--border)] bg-[var(--surface-secondary)] p-4">
-        <p className="mb-3 text-center text-xs font-bold uppercase tracking-wider text-[var(--text-tertiary)]">
-          Demo Credentials
-        </p>
-        <div className="space-y-2">
-          {[
-            { role: 'Owner', email: 'manangupta1101@gmail.com', pass: 'owner123', color: 'var(--primary)' },
-            { role: 'Admin', email: 'manangupta5055@gmail.com', pass: 'admin123', color: 'var(--warning, #f59e0b)' },
-            { role: 'Editor', email: 'manangupta228@gmail.com', pass: 'editor123', color: 'var(--success, #22c55e)' },
-          ].map((cred) => (
-            <button
-              key={cred.role}
-              type="button"
-              onClick={() => {
-                setEmail(cred.email);
-                setPassword(cred.pass);
-              }}
-              className="group w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-left transition-all hover:border-[var(--primary)] hover:shadow-sm"
-            >
-              <div className="flex items-center justify-between">
-                <span
-                  className="rounded-full px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white"
-                  style={{ backgroundColor: cred.color }}
-                >
-                  {cred.role}
-                </span>
-                <span className="text-[11px] text-[var(--text-tertiary)] opacity-0 transition-opacity group-hover:opacity-100">
-                  Click to use
-                </span>
+            {error && (
+              <div className="rounded-[var(--radius-md)] bg-[var(--error-light)] px-3 py-2">
+                <p className="text-sm text-[var(--error)]">{error}</p>
               </div>
-              <p className="mt-1.5 text-xs text-[var(--text-secondary)]">
-                {cred.email}
-              </p>
-              <p className="text-xs text-[var(--text-tertiary)]">
-                Password: {cred.pass}
-              </p>
-            </button>
-          ))}
-        </div>
+            )}
+
+            <Button type="submit" fullWidth size="lg" disabled={loading}>
+              {loading ? 'Signing in...' : 'Sign in'}
+            </Button>
+          </form>
+
+          <button
+            type="button"
+            onClick={() => {
+              setForgotEmail(email);
+              setForgotOpen(true);
+            }}
+            className="mt-2.5 w-full text-center text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
+          >
+            Forgot your password?
+          </button>
+
+          <Divider />
+
+          <p className="text-center text-sm text-[var(--text-secondary)]">
+            Don&apos;t have an account?{' '}
+            <a
+              href="/signup"
+              className="font-medium text-[var(--primary)] transition-colors hover:text-[var(--primary-hover)]"
+            >
+              Sign up
+            </a>
+          </p>
+        </Card>
       </div>
 
       {/* Forgot Password Modal */}
