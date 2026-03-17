@@ -21,7 +21,8 @@ export const TabToggle = <T extends string>({
   return (
     <div
       className={`
-        inline-flex rounded-[var(--radius-md)] bg-[var(--surface-secondary)] p-1
+        inline-flex rounded-[var(--radius-md)] border-[2.5px] border-[var(--navy)]
+        bg-[var(--surface)] p-1 shadow-[var(--shadow-sm)]
         ${className}
       `}
       role="tablist"
@@ -34,11 +35,11 @@ export const TabToggle = <T extends string>({
           aria-selected={value === option.value}
           onClick={() => onChange(option.value)}
           className={`
-            rounded-[var(--radius-sm)] px-3.5 py-1.5 text-sm font-medium
-            transition-all duration-[var(--transition-fast)]
+            rounded-[var(--radius-sm)] px-4 py-1.5 text-sm font-bold
+            transition-all duration-200 ease-out
             ${
               value === option.value
-                ? 'bg-[var(--surface)] text-[var(--text-primary)] shadow-[var(--shadow-xs)]'
+                ? 'bg-[var(--primary)] text-white'
                 : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
             }
           `}

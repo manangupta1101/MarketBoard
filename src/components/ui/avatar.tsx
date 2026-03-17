@@ -14,13 +14,13 @@ const SIZE_STYLES = {
 };
 
 const AVATAR_COLORS = [
-  'bg-blue-100 text-blue-700',
-  'bg-emerald-100 text-emerald-700',
-  'bg-amber-100 text-amber-700',
-  'bg-violet-100 text-violet-700',
-  'bg-rose-100 text-rose-700',
-  'bg-cyan-100 text-cyan-700',
-  'bg-orange-100 text-orange-700',
+  'bg-blue-500 text-white',
+  'bg-[var(--primary)] text-white',
+  'bg-purple-500 text-white',
+  'bg-amber-500 text-white',
+  'bg-rose-500 text-white',
+  'bg-cyan-500 text-white',
+  'bg-orange-500 text-white',
 ];
 
 const getColorFromName = (name: string): string => {
@@ -49,8 +49,7 @@ export const Avatar = ({ name, src, size = 'md', className = '' }: AvatarProps) 
         width={pxSize}
         height={pxSize}
         className={`
-          ${SIZE_STYLES[size]} rounded-full object-cover
-          ring-2 ring-[var(--surface)] ${className}
+          ${SIZE_STYLES[size]} rounded-full object-cover ${className}
         `}
       />
     );
@@ -60,7 +59,7 @@ export const Avatar = ({ name, src, size = 'md', className = '' }: AvatarProps) 
     <div
       className={`
         ${SIZE_STYLES[size]} flex items-center justify-center
-        rounded-full font-medium
+        rounded-full font-bold
         ${getColorFromName(name)} ${className}
       `}
       aria-label={name}

@@ -20,13 +20,13 @@ export const IconContainer = ({
 }: IconContainerProps) => {
   const variantStyles =
     variant === 'filled'
-      ? 'bg-[var(--primary)] text-white'
-      : 'border border-[var(--border)] bg-[var(--surface)] text-[var(--primary)]';
+      ? 'bg-[var(--primary)] text-white border-[1.5px] border-[var(--navy)]'
+      : 'border-[1.5px] border-[var(--primary)] bg-[var(--primary-light)] text-[var(--primary)]';
 
   return (
     <div
       className={`
-        flex items-center justify-center rounded-[var(--radius-lg)]
+        flex items-center justify-center rounded-xl
         ${SIZE_STYLES[size]} ${variantStyles} ${className}
       `}
     >

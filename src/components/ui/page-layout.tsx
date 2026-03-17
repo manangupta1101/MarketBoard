@@ -10,11 +10,11 @@ export const PageHeader = ({ title, description, actions }: PageHeaderProps) => 
   return (
     <div className="flex items-start justify-between gap-4">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-[var(--text-primary)]">
+        <h1 className="text-2xl font-extrabold tracking-tight text-[var(--text-primary)]">
           {title}
         </h1>
         {description && (
-          <p className="mt-1 text-sm text-[var(--text-secondary)]">
+          <p className="mt-1 text-sm font-medium text-[var(--text-secondary)]">
             {description}
           </p>
         )}
@@ -52,10 +52,10 @@ export const PageSection = ({ title, description, children, className = '' }: Pa
       {(title || description) && (
         <div className="mb-4">
           {title && (
-            <h2 className="text-lg font-semibold text-[var(--text-primary)]">{title}</h2>
+            <h2 className="text-lg font-extrabold text-[var(--text-primary)]">{title}</h2>
           )}
           {description && (
-            <p className="mt-0.5 text-sm text-[var(--text-secondary)]">{description}</p>
+            <p className="mt-0.5 text-sm font-medium text-[var(--text-secondary)]">{description}</p>
           )}
         </div>
       )}

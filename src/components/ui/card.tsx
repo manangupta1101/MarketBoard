@@ -22,10 +22,10 @@ export const Card = ({
   return (
     <div
       className={`
-        bg-[var(--surface)] border border-[var(--border)]
-        rounded-[var(--radius-lg)]
+        bg-[var(--surface)] border-[2.5px] border-[var(--navy)]
+        rounded-2xl
         ${PADDING_STYLES[padding]}
-        ${shadow ? 'shadow-[var(--shadow-sm)]' : ''}
+        ${shadow ? 'shadow-[var(--shadow-md)]' : ''}
         ${className}
       `}
       {...props}

@@ -14,7 +14,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
         {label && (
           <label
             htmlFor={textareaId}
-            className="mb-1.5 block text-sm font-medium text-[var(--text-primary)]"
+            className="mb-1.5 block text-sm font-bold text-[var(--text-primary)]"
           >
             {label}
           </label>
@@ -23,21 +23,21 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
           ref={ref}
           id={textareaId}
           className={`
-            w-full border border-[var(--border)] bg-[var(--surface)]
-            rounded-[var(--radius-md)] px-3.5 py-2 text-sm text-[var(--text-primary)]
+            w-full border-[2px] border-[var(--border-light)] bg-[var(--surface)]
+            rounded-[var(--radius-md)] px-4 py-2.5 text-sm text-[var(--text-primary)]
             placeholder-[var(--text-tertiary)] outline-none
-            transition-all duration-[var(--transition-fast)]
+            transition-all duration-200 ease-out
             resize-y min-h-[80px]
-            hover:border-[var(--border-hover)]
-            focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary)]/10
-            ${error ? 'border-[var(--error)] focus:ring-[var(--error)]/10' : ''}
+            hover:border-[var(--navy)]
+            focus:border-[var(--primary)] focus:ring-0
+            ${error ? 'border-[var(--error)] focus:border-[var(--error)]' : ''}
             ${className}
           `}
           aria-invalid={error ? 'true' : undefined}
           {...props}
         />
         {error && (
-          <p className="mt-1.5 text-xs text-[var(--error)]" role="alert">
+          <p className="mt-1.5 text-xs font-medium text-[var(--error)]" role="alert">
             {error}
           </p>
         )}

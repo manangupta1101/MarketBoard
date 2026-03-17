@@ -1,50 +1,75 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,700;0,9..40,800;1,9..40,400;1,9..40,500;1,9..40,700;1,9..40,800&display=swap');
 @import "tailwindcss";
 
 :root {
-  /* Background */
-  --background: #f7f7f5;
-  --foreground: #1a1a1a;
+  /* Background — warm cream/peach */
+  --background: #FFF5EC;
+  --foreground: #1E293B;
 
   /* Surfaces */
-  --surface: #ffffff;
-  --surface-hover: #fafaf9;
-  --surface-active: #f5f5f3;
-  --surface-secondary: #f0f0ee;
+  --surface: #FFFFFF;
+  --surface-hover: #F8FAFC;
+  --surface-active: #F1F5F9;
+  --surface-secondary: #F8FAFC;
 
-  /* Borders */
-  --border: #e8e5e0;
-  --border-hover: #d4d0ca;
-  --border-focus: #9ca3af;
+  /* Borders — thick navy */
+  --border: #1E293B;
+  --border-light: #CBD5E1;
+  --border-hover: #334155;
+  --border-focus: #22C55E;
 
-  /* Primary accent — muted blue */
-  --primary: #2383e2;
-  --primary-hover: #1b6ec2;
-  --primary-active: #1560a9;
-  --primary-light: #e8f0fe;
-  --primary-text: #ffffff;
+  /* Primary accent — Green */
+  --primary: #22C55E;
+  --primary-hover: #16A34A;
+  --primary-active: #15803D;
+  --primary-light: #DCFCE7;
+  --primary-text: #FFFFFF;
+
+  /* Navy */
+  --navy: #1E293B;
+  --navy-light: #334155;
+  --navy-deep: #0F172A;
 
   /* Text */
-  --text-primary: #1a1a1a;
-  --text-secondary: #6b7280;
-  --text-tertiary: #9ca3af;
-  --text-inverse: #ffffff;
+  --text-primary: #1E293B;
+  --text-secondary: #64748B;
+  --text-tertiary: #94A3B8;
+  --text-inverse: #FFFFFF;
 
   /* Status */
-  --success: #0f766e;
-  --success-light: #ecfdf5;
-  --warning: #b45309;
-  --warning-light: #fffbeb;
-  --error: #dc2626;
-  --error-light: #fef2f2;
+  --success: #22C55E;
+  --success-light: #DCFCE7;
+  --warning: #F59E0B;
+  --warning-light: #FEF3C7;
+  --error: #EF4444;
+  --error-light: #FEE2E2;
+  --status-open: #3B82F6;
+  --status-progress: #F59E0B;
+  --status-review: #8B5CF6;
+  --status-closed: #22C55E;
 
-  /* Shadows */
-  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.06), 0 2px 4px -2px rgba(0, 0, 0, 0.04);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
-  --shadow-overlay: 0 16px 40px rgba(0, 0, 0, 0.12);
+  /* Priority */
+  --priority-urgent-bg: #FEE2E2;
+  --priority-urgent-text: #DC2626;
+  --priority-urgent-border: #FECACA;
+  --priority-high-bg: #FEF3C7;
+  --priority-high-text: #D97706;
+  --priority-high-border: #FDE68A;
+  --priority-medium-bg: #DBEAFE;
+  --priority-medium-text: #2563EB;
+  --priority-medium-border: #BFDBFE;
+  --priority-low-bg: #F1F5F9;
+  --priority-low-text: #64748B;
+  --priority-low-border: #E2E8F0;
 
-  /* Spacing (8px grid) */
+  /* Shadows — hard drop shadows, NO blur, navy color */
+  --shadow-xs: 2px 2px 0px #1E293B;
+  --shadow-sm: 3px 3px 0px #1E293B;
+  --shadow-md: 4px 4px 0px #1E293B;
+  --shadow-lg: 6px 6px 0px #1E293B;
+  --shadow-overlay: 8px 8px 0px #1E293B;
+
+  /* Spacing (8px base grid) */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -56,23 +81,23 @@
   --space-12: 48px;
   --space-16: 64px;
 
-  /* Radius */
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
+  /* Radius — larger, playful */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
   --radius-full: 9999px;
 
   /* Transitions */
-  --transition-fast: 120ms ease;
-  --transition-base: 180ms ease;
-  --transition-slow: 280ms ease;
+  --transition-fast: 150ms ease;
+  --transition-base: 200ms ease-out;
+  --transition-slow: 300ms ease-out;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: "DM Sans", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: var(--font-geist-mono);
 }
 
@@ -83,19 +108,19 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: "DM Sans", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   line-height: 1.5;
 }
 
-/* Focus ring utility */
+/* Focus ring utility — green accent */
 :focus-visible {
-  outline: 2px solid var(--primary);
+  outline: 2.5px solid var(--primary);
   outline-offset: 2px;
 }
 
-/* Scrollbar styling — subtle, Notion-like */
+/* Scrollbar styling */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -106,7 +131,7 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--border-hover);
+  background: var(--border-light);
   border-radius: var(--radius-full);
 }
 

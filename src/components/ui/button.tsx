@@ -14,19 +14,19 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const VARIANT_STYLES: Record<ButtonVariant, string> = {
   primary:
-    'bg-[var(--primary)] text-[var(--primary-text)] font-medium hover:bg-[var(--primary-hover)] active:bg-[var(--primary-active)] disabled:opacity-50 disabled:pointer-events-none shadow-[var(--shadow-xs)]',
+    'bg-[var(--primary)] text-white font-bold border-[2.5px] border-[var(--navy)] rounded-full shadow-[var(--shadow-sm)] hover:bg-[var(--primary-hover)] hover:shadow-[var(--shadow-md)] active:translate-x-[1px] active:translate-y-[1px] active:shadow-[var(--shadow-xs)] disabled:opacity-50 disabled:pointer-events-none',
   secondary:
-    'border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] font-medium hover:bg-[var(--surface-hover)] active:bg-[var(--surface-active)] disabled:opacity-50 disabled:pointer-events-none shadow-[var(--shadow-xs)]',
+    'bg-[var(--surface)] text-[var(--text-primary)] font-bold border-[2.5px] border-[var(--navy)] rounded-full shadow-[var(--shadow-sm)] hover:bg-[var(--surface-hover)] hover:shadow-[var(--shadow-md)] active:translate-x-[1px] active:translate-y-[1px] active:shadow-[var(--shadow-xs)] disabled:opacity-50 disabled:pointer-events-none',
   ghost:
-    'text-[var(--text-secondary)] font-medium hover:text-[var(--text-primary)] hover:bg-[var(--surface-active)] disabled:opacity-50 disabled:pointer-events-none',
+    'text-[var(--text-secondary)] font-medium hover:text-[var(--text-primary)] hover:bg-[var(--surface-active)] rounded-[var(--radius-md)] disabled:opacity-50 disabled:pointer-events-none',
   danger:
-    'bg-[var(--error)] text-white font-medium hover:bg-red-700 active:bg-red-800 disabled:opacity-50 disabled:pointer-events-none shadow-[var(--shadow-xs)]',
+    'bg-[var(--error)] text-white font-bold border-[2.5px] border-[var(--navy)] rounded-full shadow-[var(--shadow-sm)] hover:bg-red-600 hover:shadow-[var(--shadow-md)] active:translate-x-[1px] active:translate-y-[1px] active:shadow-[var(--shadow-xs)] disabled:opacity-50 disabled:pointer-events-none',
 };
 
 const SIZE_STYLES: Record<ButtonSize, string> = {
-  sm: 'px-3 py-1.5 text-xs rounded-[var(--radius-sm)]',
-  md: 'px-3.5 py-2 text-sm rounded-[var(--radius-md)]',
-  lg: 'px-5 py-2.5 text-sm rounded-[var(--radius-md)]',
+  sm: 'px-4 py-1.5 text-xs',
+  md: 'px-5 py-2 text-sm',
+  lg: 'px-6 py-2.5 text-sm',
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
@@ -53,9 +53,9 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         disabled={isDisabled}
         className={`
           inline-flex items-center justify-center gap-2
-          transition-all duration-[var(--transition-fast)]
+          transition-all duration-200 ease-out
           ${VARIANT_STYLES[variant]}
-          ${variant !== 'ghost' ? SIZE_STYLES[size] : `rounded-[var(--radius-md)] px-2 py-1.5 text-sm`}
+          ${variant !== 'ghost' ? SIZE_STYLES[size] : `px-2 py-1.5 text-sm`}
           ${fullWidth ? 'w-full' : ''}
           ${className}
         `}
@@ -66,7 +66,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         ) : icon ? (
           icon
         ) : showArrow ? (
-          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
           </svg>
         ) : null}

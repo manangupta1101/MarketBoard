@@ -50,17 +50,18 @@ export const Modal = ({
     <div
       ref={overlayRef}
       onClick={handleOverlayClick}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-[2px]"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(30,41,59,0.4)] p-4"
       role="dialog"
       aria-modal="true"
     >
       <div
         className={`
           relative w-full ${MAX_WIDTH_STYLES[maxWidth]}
-          bg-[var(--surface)] border border-[var(--border)]
-          rounded-[var(--radius-xl)] p-8
+          bg-[var(--surface)] border-[2.5px] border-[var(--navy)]
+          rounded-[20px] p-8
           shadow-[var(--shadow-overlay)]
           animate-in fade-in zoom-in-95 duration-200
+          max-h-[90vh] overflow-y-auto
         `}
       >
         <button
@@ -68,9 +69,10 @@ export const Modal = ({
           onClick={onClose}
           className="
             absolute top-4 right-4 flex h-8 w-8 items-center justify-center
-            rounded-[var(--radius-md)] text-[var(--text-tertiary)]
-            transition-all duration-[var(--transition-fast)]
-            hover:bg-[var(--surface-active)] hover:text-[var(--text-primary)]
+            rounded-full text-[var(--text-tertiary)]
+            border-[2px] border-[var(--border-light)]
+            transition-all duration-200 ease-out
+            hover:bg-[var(--surface-active)] hover:text-[var(--text-primary)] hover:border-[var(--navy)]
           "
           aria-label="Close"
         >
@@ -83,7 +85,7 @@ export const Modal = ({
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
-              strokeWidth={2}
+              strokeWidth={2.5}
               d="M6 18L18 6M6 6l12 12"
             />
           </svg>
