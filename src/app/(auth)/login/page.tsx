@@ -15,8 +15,8 @@ export default function LoginPage() {
   const router = useRouter();
   const login = useAuthStore((s) => s.login);
 
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState('manangupta1101@gmail.com');
+  const [password, setPassword] = useState('owner123');
   const [forgotOpen, setForgotOpen] = useState(false);
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotSent, setForgotSent] = useState(false);
@@ -147,6 +147,48 @@ export default function LoginPage() {
           </a>
         </p>
       </Card>
+
+      {/* Demo Credentials */}
+      <div className="mx-auto mt-4 max-w-[380px] rounded-[var(--radius-lg)] border-2 border-dashed border-[var(--border)] bg-[var(--surface-secondary)] p-4">
+        <p className="mb-3 text-center text-xs font-bold uppercase tracking-wider text-[var(--text-tertiary)]">
+          Demo Credentials
+        </p>
+        <div className="space-y-2">
+          {[
+            { role: 'Owner', email: 'manangupta1101@gmail.com', pass: 'owner123', color: 'var(--primary)' },
+            { role: 'Admin', email: 'manangupta5055@gmail.com', pass: 'admin123', color: 'var(--warning, #f59e0b)' },
+            { role: 'Editor', email: 'manangupta228@gmail.com', pass: 'editor123', color: 'var(--success, #22c55e)' },
+          ].map((cred) => (
+            <button
+              key={cred.role}
+              type="button"
+              onClick={() => {
+                setEmail(cred.email);
+                setPassword(cred.pass);
+              }}
+              className="group w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-left transition-all hover:border-[var(--primary)] hover:shadow-sm"
+            >
+              <div className="flex items-center justify-between">
+                <span
+                  className="rounded-full px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white"
+                  style={{ backgroundColor: cred.color }}
+                >
+                  {cred.role}
+                </span>
+                <span className="text-[11px] text-[var(--text-tertiary)] opacity-0 transition-opacity group-hover:opacity-100">
+                  Click to use
+                </span>
+              </div>
+              <p className="mt-1.5 text-xs text-[var(--text-secondary)]">
+                {cred.email}
+              </p>
+              <p className="text-xs text-[var(--text-tertiary)]">
+                Password: {cred.pass}
+              </p>
+            </button>
+          ))}
+        </div>
+      </div>
 
       {/* Forgot Password Modal */}
       <Modal open={forgotOpen} onClose={handleCloseForgot}>
