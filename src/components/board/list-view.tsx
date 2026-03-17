@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import type { CreativeRequest, AppRole, RequestPriority, RequestStatus } from '@/types';
 import {
   PRIORITY_CONFIG,
@@ -33,7 +33,7 @@ const STATUS_SORT_ORDER: Record<RequestStatus, number> = {
   deleted: 4,
 };
 
-type SortField = 'title' | 'priority' | 'status' | 'dueDate' | 'createdAt';
+type SortField = 'title' | 'priority' | 'status' | 'dueDate' | 'submittedAt' | 'createdAt';
 type SortDir = 'asc' | 'desc';
 
 // --- Props ---
@@ -118,8 +118,11 @@ export const ListView = ({ requests, onRowClick, role }: ListViewProps) => {
   const [toDate, setToDate] = useState('');
 
   // Sort state
-  const [sortField, setSortField] = useState<SortField>('createdAt');
+  const [sortField, setSortField] = useState<SortField>('submittedAt');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
 
   // Role flags
   const isAdmin = role === 'admin' || role === 'owner';
@@ -139,6 +142,9 @@ export const ListView = ({ requests, onRowClick, role }: ListViewProps) => {
     });
     return Array.from(map.entries()).map(([value, label]) => ({ value, label }));
   }, [requests]);
+
+  // Reset page when filters change
+  useEffect(() => { setCurrentPage(1); }, [search, statusFilter, priorityFilter, typeFilter, assigneeFilter, fromDate, toDate]);
 
   // Filtering
   const filtered = useMemo(() => {
@@ -186,6 +192,7 @@ export const ListView = ({ requests, onRowClick, role }: ListViewProps) => {
           const bD = b.dueDate ? new Date(b.dueDate).getTime() : Infinity;
           return dir * (aD - bD);
         }
+        case 'submittedAt':
         case 'createdAt':
           return dir * (new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
         default:
@@ -216,8 +223,13 @@ export const ListView = ({ requests, onRowClick, role }: ListViewProps) => {
       'Requester Email',
       'Assigned To',
       'Due Date',
+      'Submitted Date',
       'Created',
       'Items',
+      'ReEdit Req',
+      'ReEdit Deadlines',
+      'ReEdit Submissions',
+      'ReEdit Requests',
       'Reference Links',
       'Final Link',
     ];
@@ -232,8 +244,13 @@ export const ListView = ({ requests, onRowClick, role }: ListViewProps) => {
       r.requesterEmail,
       r.assigneeName || '',
       r.dueDate || '',
+      r.createdAt ? new Date(r.createdAt).toLocaleDateString('en-IN') : '',
       r.createdAt,
       String(r.totalItems ?? 1),
+      r.reEdits.length > 0 ? 'Yes' : 'No',
+      r.reEdits.map((re, i) => `#${i + 1}: ${re.deadline}`).join(' | ') || '',
+      r.reEdits.map((re, i) => `#${i + 1}: ${re.submittedAt || 'Pending'}`).join(' | ') || '',
+      (r.reEditRequests ?? []).map((req, i) => `#${i + 1}: ${req.status} (${req.requestedByName})`).join(' | ') || '',
       r.referenceLinks.join(' | '),
       r.finalLink || '',
     ]);
@@ -251,8 +268,15 @@ export const ListView = ({ requests, onRowClick, role }: ListViewProps) => {
     URL.revokeObjectURL(url);
   };
 
+  // Pagination
+  const PAGE_SIZE = 80;
+  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
+  // Reset to page 1 when filters change the result set
+  const safeCurrentPage = currentPage > totalPages ? 1 : currentPage;
+  const paginatedRows = sorted.slice((safeCurrentPage - 1) * PAGE_SIZE, safeCurrentPage * PAGE_SIZE);
+
   // Column count for empty-state colSpan
-  const colCount = 9 + (showRequesterCol ? 1 : 0) + (showAssigneeCol ? 1 : 0);
+  const colCount = 14 + (showRequesterCol ? 1 : 0) + (showAssigneeCol ? 1 : 0);
 
   // Filter dropdown options
   const statusOptions = [
@@ -272,7 +296,7 @@ export const ListView = ({ requests, onRowClick, role }: ListViewProps) => {
   // Sortable header helper
   const SortTh = ({ field, children }: { field: SortField; children: string }) => (
     <th
-      className="cursor-pointer select-none px-4 py-3 text-left text-xs font-medium text-[var(--text-secondary)]"
+      className="cursor-pointer select-none px-4 py-3 text-left text-xs font-bold uppercase tracking-wide text-[var(--text-secondary)]"
       onClick={() => toggleSort(field)}
     >
       <div className="flex items-center gap-1">
@@ -283,14 +307,14 @@ export const ListView = ({ requests, onRowClick, role }: ListViewProps) => {
   );
 
   const PlainTh = ({ children }: { children: string }) => (
-    <th className="px-4 py-3 text-left text-xs font-medium text-[var(--text-secondary)]">{children}</th>
+    <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wide text-[var(--text-secondary)]">{children}</th>
   );
 
   return (
     <div className="space-y-4">
       {/* ── Header ── */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-semibold tracking-tight text-[var(--text-primary)]">{title}</h2>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h2 className="text-2xl font-extrabold tracking-tight text-[var(--text-primary)]">{title}</h2>
         <div className="flex items-center gap-3">
           {showExport && (
             <Button
@@ -298,7 +322,7 @@ export const ListView = ({ requests, onRowClick, role }: ListViewProps) => {
               size="sm"
               onClick={exportCsv}
               icon={
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -310,24 +334,24 @@ export const ListView = ({ requests, onRowClick, role }: ListViewProps) => {
               Export CSV
             </Button>
           )}
-          <span className="rounded-[var(--radius-md)] border border-[var(--border)] px-3 py-1.5 text-sm text-[var(--text-secondary)]">
-            {sorted.length} of {requests.length}
+          <span className="rounded-full border-[2px] border-[var(--border-light)] bg-[var(--surface)] px-3 py-1.5 text-sm font-bold text-[var(--text-secondary)]">
+            {sorted.length} of {requests.length}{totalPages > 1 ? ` · Page ${safeCurrentPage}/${totalPages}` : ''}
           </span>
         </div>
       </div>
 
       {/* ── Filters ── */}
-      <div className="flex flex-wrap gap-3 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] p-4">
+      <div className="flex flex-wrap gap-3 rounded-2xl border-[2.5px] border-[var(--navy)] bg-[var(--surface)] p-4 shadow-[var(--shadow-sm)]">
         <div className="min-w-[160px] flex-[1.5]">
-          <label className="mb-1 block text-xs font-medium text-[var(--text-secondary)]">Search</label>
+          <label className="mb-1 block text-xs font-bold text-[var(--text-secondary)]">Search</label>
           <Input placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} />
         </div>
         <div className="min-w-[130px] flex-1">
-          <label className="mb-1 block text-xs font-medium text-[var(--text-secondary)]">Status</label>
+          <label className="mb-1 block text-xs font-bold text-[var(--text-secondary)]">Status</label>
           <Select options={statusOptions} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} />
         </div>
         <div className="min-w-[130px] flex-1">
-          <label className="mb-1 block text-xs font-medium text-[var(--text-secondary)]">Priority</label>
+          <label className="mb-1 block text-xs font-bold text-[var(--text-secondary)]">Priority</label>
           <Select
             options={priorityOptions}
             value={priorityFilter}
@@ -335,12 +359,12 @@ export const ListView = ({ requests, onRowClick, role }: ListViewProps) => {
           />
         </div>
         <div className="min-w-[130px] flex-1">
-          <label className="mb-1 block text-xs font-medium text-[var(--text-secondary)]">Type</label>
+          <label className="mb-1 block text-xs font-bold text-[var(--text-secondary)]">Type</label>
           <Select options={typeOptions} value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} />
         </div>
         {showAssigneeFilter && (
           <div className="min-w-[140px] flex-1">
-            <label className="mb-1 block text-xs font-medium text-[var(--text-secondary)]">Assignee</label>
+            <label className="mb-1 block text-xs font-bold text-[var(--text-secondary)]">Assignee</label>
             <Select
               options={assigneeSelectOptions}
               value={assigneeFilter}
@@ -349,20 +373,20 @@ export const ListView = ({ requests, onRowClick, role }: ListViewProps) => {
           </div>
         )}
         <div className="min-w-[140px] flex-1">
-          <label className="mb-1 block text-xs font-medium text-[var(--text-secondary)]">From Date</label>
+          <label className="mb-1 block text-xs font-bold text-[var(--text-secondary)]">From Date</label>
           <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
         </div>
         <div className="min-w-[140px] flex-1">
-          <label className="mb-1 block text-xs font-medium text-[var(--text-secondary)]">To Date</label>
+          <label className="mb-1 block text-xs font-bold text-[var(--text-secondary)]">To Date</label>
           <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
         </div>
       </div>
 
       {/* ── Table ── */}
-      <div className="overflow-x-auto rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)]">
-        <table className="w-full min-w-[1100px]">
+      <div className="overflow-x-auto rounded-2xl border-[2.5px] border-[var(--navy)] bg-[var(--surface)] shadow-[var(--shadow-sm)]">
+        <table className="w-full min-w-[1700px]">
           <thead>
-            <tr className="border-b border-[var(--border)] bg-[var(--surface-secondary)]">
+            <tr className="border-b-[2px] border-[var(--border-light)] bg-[var(--surface-secondary)]">
               <SortTh field="title">Title</SortTh>
               <PlainTh>Type</PlainTh>
               <SortTh field="priority">Priority</SortTh>
@@ -370,22 +394,27 @@ export const ListView = ({ requests, onRowClick, role }: ListViewProps) => {
               {showRequesterCol && <PlainTh>Requester</PlainTh>}
               {showAssigneeCol && <PlainTh>Assigned To</PlainTh>}
               <SortTh field="dueDate">Due Date</SortTh>
+              <SortTh field="submittedAt">Submitted</SortTh>
               <SortTh field="createdAt">Created</SortTh>
               <PlainTh>Items</PlainTh>
+              <PlainTh>ReEdit Req</PlainTh>
+              <PlainTh>ReEdit Deadline</PlainTh>
+              <PlainTh>ReEdit Submission</PlainTh>
+              <PlainTh>ReEdit Requests</PlainTh>
               <PlainTh>Links</PlainTh>
               <PlainTh>Final Link</PlainTh>
             </tr>
           </thead>
 
           <tbody>
-            {sorted.length === 0 ? (
+            {paginatedRows.length === 0 ? (
               <tr>
-                <td colSpan={colCount} className="px-4 py-12 text-center text-sm text-[var(--text-tertiary)]">
+                <td colSpan={colCount} className="px-4 py-12 text-center text-sm font-medium text-[var(--text-tertiary)]">
                   No requests found
                 </td>
               </tr>
             ) : (
-              sorted.map((req) => {
+              paginatedRows.map((req) => {
                 const pCfg = PRIORITY_CONFIG[req.priority];
                 const sColor = getStatusBadgeColor(req.status);
                 const isDeleted = req.status === 'deleted';
@@ -394,11 +423,11 @@ export const ListView = ({ requests, onRowClick, role }: ListViewProps) => {
                   <tr
                     key={req.id}
                     onClick={() => onRowClick(req)}
-                    className={`cursor-pointer border-b border-[var(--border)] last:border-b-0 transition-colors duration-[var(--transition-fast)] hover:bg-[var(--surface-hover)] ${isDeleted ? 'bg-red-50/50 line-through decoration-red-400/60' : ''}`}
+                    className={`cursor-pointer border-b border-[var(--border-light)] last:border-b-0 transition-colors duration-200 hover:bg-[var(--surface-hover)] ${isDeleted ? 'bg-red-50/50 line-through decoration-red-400/60' : ''}`}
                   >
                     {/* Title + description */}
                     <td className="max-w-[240px] px-4 py-3">
-                      <div className="truncate text-sm font-medium text-[var(--text-primary)]">{req.title}</div>
+                      <div className="truncate text-sm font-bold text-[var(--text-primary)]">{req.title}</div>
                       {req.description && (
                         <div className="mt-0.5 truncate text-xs text-[var(--text-tertiary)]">{req.description}</div>
                       )}
@@ -408,7 +437,7 @@ export const ListView = ({ requests, onRowClick, role }: ListViewProps) => {
                     <td className="whitespace-nowrap px-4 py-3">
                       <div className="flex items-center gap-1.5">
                         <span className="text-sm">{REQUEST_TYPE_ICONS[req.type]}</span>
-                        <span className="text-sm text-[var(--text-secondary)]">{REQUEST_TYPE_LABELS[req.type]}</span>
+                        <span className="text-sm font-medium text-[var(--text-secondary)]">{REQUEST_TYPE_LABELS[req.type]}</span>
                       </div>
                     </td>
 
@@ -429,7 +458,7 @@ export const ListView = ({ requests, onRowClick, role }: ListViewProps) => {
                     {/* Requester (admin + editor) */}
                     {showRequesterCol && (
                       <td className="px-4 py-3">
-                        <div className="text-sm font-medium text-[var(--text-primary)]">{req.requesterName}</div>
+                        <div className="text-sm font-bold text-[var(--text-primary)]">{req.requesterName}</div>
                         <div className="text-xs text-[var(--text-tertiary)]">{req.requesterEmail}</div>
                       </td>
                     )}
@@ -437,15 +466,20 @@ export const ListView = ({ requests, onRowClick, role }: ListViewProps) => {
                     {/* Assigned To (admin + member) */}
                     {showAssigneeCol && (
                       <td className="px-4 py-3">
-                        <span className="text-sm text-[var(--text-secondary)]">{req.assigneeName || '—'}</span>
+                        <span className="text-sm font-medium text-[var(--text-secondary)]">{req.assigneeName || '—'}</span>
                       </td>
                     )}
 
                     {/* Due Date */}
                     <td className="whitespace-nowrap px-4 py-3">
-                      <span className="text-sm text-[var(--text-secondary)]">
+                      <span className="text-sm font-medium text-[var(--text-secondary)]">
                         {req.dueDate ? formatDate(req.dueDate) : '—'}
                       </span>
+                    </td>
+
+                    {/* Submitted */}
+                    <td className="whitespace-nowrap px-4 py-3">
+                      <span className="text-sm font-medium text-[var(--text-secondary)]">{formatDate(req.createdAt)}</span>
                     </td>
 
                     {/* Created */}
@@ -455,7 +489,73 @@ export const ListView = ({ requests, onRowClick, role }: ListViewProps) => {
 
                     {/* Items */}
                     <td className="px-4 py-3 text-center">
-                      <span className="text-sm font-semibold text-[var(--error)]">{req.totalItems ?? 1}</span>
+                      <span className="text-sm font-extrabold text-[var(--error)]">{req.totalItems ?? 1}</span>
+                    </td>
+
+                    {/* ReEdit Req */}
+                    <td className="px-4 py-3 text-center">
+                      {req.reEdits.length > 0 ? (
+                        <span className="text-xs font-bold text-amber-600">Yes</span>
+                      ) : (
+                        <span className="text-xs text-[var(--text-tertiary)]">No</span>
+                      )}
+                    </td>
+
+                    {/* ReEdit Deadline (stacked) */}
+                    <td className="px-4 py-3">
+                      {req.reEdits.length > 0 ? (
+                        <div className="flex flex-col gap-1">
+                          {req.reEdits.map((re, i) => (
+                            <span key={re.id} className="text-xs font-medium text-[var(--text-secondary)]">
+                              #{i + 1}: {formatDate(re.deadline)}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-[var(--text-tertiary)]">—</span>
+                      )}
+                    </td>
+
+                    {/* ReEdit Submission (stacked) */}
+                    <td className="px-4 py-3">
+                      {req.reEdits.length > 0 ? (
+                        <div className="flex flex-col gap-1">
+                          {req.reEdits.map((re, i) => (
+                            <span
+                              key={re.id}
+                              className={`text-xs font-medium ${re.submittedAt ? 'text-green-600' : 'text-amber-600'}`}
+                            >
+                              #{i + 1}: {re.submittedAt ? formatDate(re.submittedAt) : 'Pending'}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-[var(--text-tertiary)]">—</span>
+                      )}
+                    </td>
+
+                    {/* Re-Edit Requests (from requester) */}
+                    <td className="px-4 py-3">
+                      {(req.reEditRequests?.length ?? 0) > 0 ? (
+                        <div className="flex flex-col gap-1">
+                          {req.reEditRequests.map((r, i) => (
+                            <span
+                              key={r.id}
+                              className={`text-xs font-medium ${
+                                r.status === 'pending'
+                                  ? 'text-blue-600'
+                                  : r.status === 'approved'
+                                    ? 'text-green-600'
+                                    : 'text-red-500'
+                              }`}
+                            >
+                              #{i + 1}: {r.status.charAt(0).toUpperCase() + r.status.slice(1)}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-[var(--text-tertiary)]">—</span>
+                      )}
                     </td>
 
                     {/* Links */}
@@ -469,7 +569,7 @@ export const ListView = ({ requests, onRowClick, role }: ListViewProps) => {
                               target="_blank"
                               rel="noopener noreferrer"
                               onClick={(e) => e.stopPropagation()}
-                              className="inline-flex items-center gap-1 text-xs font-medium text-[var(--primary)] hover:text-[var(--primary-hover)]"
+                              className="inline-flex items-center gap-1 text-xs font-bold text-[var(--primary)] hover:text-[var(--primary-hover)]"
                             >
                               <ExternalLinkIcon />
                               Link {i + 1}
@@ -489,7 +589,7 @@ export const ListView = ({ requests, onRowClick, role }: ListViewProps) => {
                           target="_blank"
                           rel="noopener noreferrer"
                           onClick={(e) => e.stopPropagation()}
-                          className="inline-flex items-center gap-1 text-xs font-medium text-[var(--primary)] hover:text-[var(--primary-hover)]"
+                          className="inline-flex items-center gap-1 text-xs font-bold text-[var(--primary)] hover:text-[var(--primary-hover)]"
                         >
                           <ExternalLinkIcon />
                           Final
@@ -505,6 +605,40 @@ export const ListView = ({ requests, onRowClick, role }: ListViewProps) => {
           </tbody>
         </table>
       </div>
+
+      {/* ── Pagination ── */}
+      {totalPages > 1 && (
+        <div className="flex flex-col gap-3 rounded-2xl border-[2.5px] border-[var(--navy)] bg-[var(--surface)] px-4 py-3 shadow-[var(--shadow-xs)] sm:flex-row sm:items-center sm:justify-between">
+          <span className="text-sm font-medium text-[var(--text-secondary)]">
+            Showing {(safeCurrentPage - 1) * PAGE_SIZE + 1}–{Math.min(safeCurrentPage * PAGE_SIZE, sorted.length)} of {sorted.length}
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={safeCurrentPage === 1}
+              aria-label="Previous page"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full border-[2px] border-[var(--border-light)] text-[var(--text-secondary)] transition-all duration-200 hover:bg-[var(--surface-hover)] hover:border-[var(--navy)] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <span className="min-w-[80px] text-center text-sm font-bold text-[var(--text-primary)]">
+              Page {safeCurrentPage} of {totalPages}
+            </span>
+            <button
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={safeCurrentPage === totalPages}
+              aria-label="Next page"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full border-[2px] border-[var(--border-light)] text-[var(--text-secondary)] transition-all duration-200 hover:bg-[var(--surface-hover)] hover:border-[var(--navy)] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

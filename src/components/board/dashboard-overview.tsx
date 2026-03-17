@@ -7,27 +7,30 @@ import {
   BarChart, Bar,
   ResponsiveContainer,
 } from 'recharts';
+import { REQUEST_TYPES, REQUEST_TYPE_LABELS } from '@/types';
 import type { CreativeRequest, RequestType } from '@/types';
 
-// ============================================
-// CONSTANTS
-// ============================================
-
-const DESIGN_TYPES: RequestType[] = ['design_graphics', 'ui_ux'];
-const VIDEO_TYPES: RequestType[] = ['video'];
-const WRITING_TYPES: RequestType[] = ['writing'];
-const SHOOTING_TYPES: RequestType[] = ['shooting'];
-const ANCHOR_TYPES: RequestType[] = ['anchor'];
-
 const CHART_COLORS = {
-  primary: '#2383e2',
+  primary: '#22c55e',
   green: '#22c55e',
   purple: '#8b5cf6',
   orange: '#f97316',
   red: '#ef4444',
   amber: '#f59e0b',
   blue: '#3b82f6',
-  gray: '#9ca3af',
+  gray: '#94a3b8',
+  teal: '#14b8a6',
+  pink: '#ec4899',
+  reEdit: '#d97706',
+};
+
+const REQUEST_TYPE_COLORS: Record<RequestType, string> = {
+  design_graphics: CHART_COLORS.purple,
+  video: CHART_COLORS.orange,
+  ui_ux: CHART_COLORS.blue,
+  writing: CHART_COLORS.green,
+  shooting: CHART_COLORS.red,
+  anchor: CHART_COLORS.teal,
 };
 
 const STATUS_COLORS: Record<string, string> = {
@@ -40,25 +43,11 @@ const STATUS_COLORS: Record<string, string> = {
 const PRIORITY_BAR_COLOR = CHART_COLORS.orange;
 
 // ============================================
-// ICONS
-// ============================================
-
-const ClockAlertIcon = () => (
-  <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-    <circle cx="12" cy="12" r="10" />
-    <polyline points="12 6 12 12 16 14" />
-  </svg>
-);
-
-// ============================================
 // HELPERS
 // ============================================
 
 const formatWeekLabel = (date: Date): string =>
   date.toLocaleDateString('en-US', { month: 'short', day: '2-digit' });
-
-const daysBetween = (a: Date, b: Date): number =>
-  Math.floor((b.getTime() - a.getTime()) / (1000 * 60 * 60 * 24));
 
 // ============================================
 // CHART CARD WRAPPER
@@ -72,8 +61,8 @@ interface ChartCardProps {
 }
 
 const ChartCard = ({ title, icon, children, className = '' }: ChartCardProps) => (
-  <div className={`rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] p-6 ${className}`}>
-    <h3 className="mb-4 flex items-center gap-2 text-sm font-bold text-[var(--text-primary)]">
+  <div className={`rounded-2xl border-[2.5px] border-[var(--navy)] bg-[var(--surface)] p-6 shadow-[var(--shadow-sm)] ${className}`}>
+    <h3 className="mb-4 flex items-center gap-2 text-sm font-extrabold text-[var(--text-primary)]">
       {icon}
       {title}
     </h3>
@@ -89,64 +78,93 @@ interface TrendsData {
   label: string;
   created: number;
   closed: number;
+  inProgress: number;
+  review: number;
+  reEdit: number;
 }
 
 const useRequestTrends = (requests: CreativeRequest[], from: Date, to: Date): TrendsData[] => {
   return useMemo(() => {
-    const weeks: TrendsData[] = [];
+    const days: TrendsData[] = [];
     const current = new Date(from);
-    current.setDate(current.getDate() - current.getDay()); // align to week start
+    current.setHours(0, 0, 0, 0);
 
-    while (current <= to) {
-      const weekEnd = new Date(current);
-      weekEnd.setDate(weekEnd.getDate() + 6);
-      weekEnd.setHours(23, 59, 59, 999);
+    const endDate = new Date(to);
+    endDate.setHours(23, 59, 59, 999);
 
-      const created = requests.filter((r) => {
+    while (current <= endDate) {
+      const dayStart = new Date(current);
+      const dayEnd = new Date(current);
+      dayEnd.setHours(23, 59, 59, 999);
+
+      // Requests created on this day
+      const dayRequests = requests.filter((r) => {
         const d = new Date(r.createdAt);
-        return d >= current && d <= weekEnd;
-      }).length;
+        return d >= dayStart && d <= dayEnd;
+      });
 
-      const closed = requests.filter((r) => {
-        if (r.status !== 'closed' && r.status !== 'deleted') return false;
-        const d = new Date(r.createdAt);
-        return d >= current && d <= weekEnd;
-      }).length;
+      const created = dayRequests.length;
+      // Closed = truly closed (not in re-edit cycle)
+      const closed = dayRequests.filter((r) => (r.status === 'closed' && !r.isInReEdit) || r.status === 'deleted').length;
+      const inProgress = dayRequests.filter((r) => r.status === 'in_progress').length;
+      const review = dayRequests.filter((r) => r.status === 'review').length;
+      // Re-edits that were initiated on this day
+      const reEdit = requests.reduce((count, r) => {
+        return count + r.reEdits.filter((re) => {
+          const d = new Date(re.createdAt);
+          return d >= dayStart && d <= dayEnd;
+        }).length;
+      }, 0);
 
-      weeks.push({ label: formatWeekLabel(current), created, closed });
+      days.push({ label: formatWeekLabel(current), created, closed, inProgress, review, reEdit });
 
-      const next = new Date(current);
-      next.setDate(next.getDate() + 7);
-      current.setTime(next.getTime());
+      current.setDate(current.getDate() + 1);
     }
 
-    return weeks;
+    return days;
   }, [requests, from, to]);
 };
 
+const formatTitleDate = (date: Date): string =>
+  date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
 const RequestTrendsChart = ({ requests, from, to }: { requests: CreativeRequest[]; from: Date; to: Date }) => {
   const data = useRequestTrends(requests, from, to);
-  const fromLabel = formatWeekLabel(from);
-  const toLabel = formatWeekLabel(to);
+  const fromLabel = formatTitleDate(from);
+  const toLabel = formatTitleDate(to);
+
+  // Show dots only when there are fewer data points (≤14 days)
+  const showDots = data.length <= 14;
 
   return (
     <ChartCard title={`Request Trends (${fromLabel} - ${toLabel})`}>
-      <ResponsiveContainer width="100%" height={220}>
+      <ResponsiveContainer width="100%" height={400}>
         <LineChart data={data} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-          <XAxis dataKey="label" tick={{ fontSize: 12, fill: 'var(--text-tertiary)' }} />
-          <YAxis tick={{ fontSize: 12, fill: 'var(--text-tertiary)' }} />
+          <CartesianGrid strokeDasharray="3 3" stroke="#CBD5E1" />
+          <XAxis
+            dataKey="label"
+            tick={{ fontSize: 11, fill: 'var(--text-tertiary)' }}
+            interval={data.length > 30 ? Math.floor(data.length / 8) : data.length > 14 ? 2 : 0}
+            angle={data.length > 14 ? -30 : 0}
+            textAnchor={data.length > 14 ? 'end' : 'middle'}
+            height={data.length > 14 ? 50 : 30}
+          />
+          <YAxis tick={{ fontSize: 12, fill: 'var(--text-tertiary)' }} allowDecimals={false} />
           <Tooltip
             contentStyle={{
-              backgroundColor: 'var(--surface)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-md)',
+              backgroundColor: '#FFFFFF',
+              border: '2.5px solid #1E293B',
+              borderRadius: '12px',
               fontSize: 12,
+              boxShadow: '3px 3px 0px #1E293B',
             }}
           />
           <Legend iconType="circle" wrapperStyle={{ fontSize: 12 }} />
-          <Line type="monotone" dataKey="created" stroke={CHART_COLORS.primary} strokeWidth={2} dot={{ r: 4 }} name="Created" />
-          <Line type="monotone" dataKey="closed" stroke={CHART_COLORS.green} strokeWidth={2} dot={{ r: 4 }} name="Closed" />
+          <Line type="monotone" dataKey="created" stroke={CHART_COLORS.primary} strokeWidth={2} dot={showDots ? { r: 3 } : false} name="Created" />
+          <Line type="monotone" dataKey="inProgress" stroke={CHART_COLORS.amber} strokeWidth={2} dot={showDots ? { r: 3 } : false} name="In Progress" />
+          <Line type="monotone" dataKey="review" stroke={CHART_COLORS.purple} strokeWidth={2} dot={showDots ? { r: 3 } : false} name="Review" />
+          <Line type="monotone" dataKey="closed" stroke={CHART_COLORS.green} strokeWidth={2} dot={showDots ? { r: 3 } : false} name="Closed" />
+          <Line type="monotone" dataKey="reEdit" stroke={CHART_COLORS.reEdit} strokeWidth={2} strokeDasharray="5 3" dot={showDots ? { r: 3 } : false} name="Re-Edits" />
         </LineChart>
       </ResponsiveContainer>
     </ChartCard>
@@ -159,43 +177,65 @@ const RequestTrendsChart = ({ requests, from, to }: { requests: CreativeRequest[
 
 const RequestTypesChart = ({ requests }: { requests: CreativeRequest[] }) => {
   const data = useMemo(() => {
-    const designCount = requests.filter((r) => DESIGN_TYPES.includes(r.type)).length;
-    const videoCount = requests.filter((r) => VIDEO_TYPES.includes(r.type)).length;
-    const writingCount = requests.filter((r) => WRITING_TYPES.includes(r.type)).length;
-    const shootingCount = requests.filter((r) => SHOOTING_TYPES.includes(r.type)).length;
-    const anchorCount = requests.filter((r) => ANCHOR_TYPES.includes(r.type)).length;
-    return [
-      { name: 'Design', value: designCount, color: CHART_COLORS.purple },
-      { name: 'Video', value: videoCount, color: CHART_COLORS.orange },
-      { name: 'Writing', value: writingCount, color: CHART_COLORS.green },
-      { name: 'Shooting', value: shootingCount, color: CHART_COLORS.red },
-      { name: 'Anchor', value: anchorCount, color: CHART_COLORS.amber },
-    ].filter((d) => d.value > 0);
+    const counts: Record<RequestType, number> = {} as Record<RequestType, number>;
+    for (const t of REQUEST_TYPES) counts[t] = 0;
+    for (const r of requests) counts[r.type]++;
+
+    return REQUEST_TYPES.map((t) => ({
+      name: REQUEST_TYPE_LABELS[t],
+      value: counts[t],
+      color: REQUEST_TYPE_COLORS[t],
+    }));
   }, [requests]);
+
+  const total = data.reduce((sum, d) => sum + d.value, 0);
 
   return (
     <ChartCard title="Request Types">
-      <div className="flex items-center justify-center">
-        <ResponsiveContainer width="100%" height={200}>
-          <PieChart>
-            <Pie
-              data={data}
-              cx="50%"
-              cy="50%"
-              innerRadius={55}
-              outerRadius={80}
-              paddingAngle={2}
-              dataKey="value"
-              label={({ name, value }) => `${name}: ${value}`}
-              labelLine={{ stroke: 'var(--text-tertiary)' }}
-            >
-              {data.map((entry) => (
-                <Cell key={entry.name} fill={entry.color} />
-              ))}
-            </Pie>
-            <Legend iconType="square" wrapperStyle={{ fontSize: 12 }} />
-          </PieChart>
-        </ResponsiveContainer>
+      <div className="flex items-center gap-4">
+        {/* Donut */}
+        <div className="w-1/2">
+          <ResponsiveContainer width="100%" height={180}>
+            <PieChart>
+              <Pie
+                data={data}
+                cx="50%"
+                cy="50%"
+                innerRadius={50}
+                outerRadius={75}
+                paddingAngle={2}
+                dataKey="value"
+              >
+                {data.map((entry) => (
+                  <Cell key={entry.name} fill={entry.color} />
+                ))}
+              </Pie>
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: 'var(--surface)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-md)',
+                  fontSize: 12,
+                }}
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                formatter={((value: any, name: any) => [`${value} (${total > 0 ? Math.round((Number(value) / total) * 100) : 0}%)`, name]) as any}
+              />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Custom legend with counts */}
+        <div className="flex w-1/2 flex-col gap-1.5">
+          {data.map((entry) => (
+            <div key={entry.name} className="flex items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-1.5">
+                <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: entry.color }} />
+                <span className="text-[var(--text-secondary)]">{entry.name}</span>
+              </div>
+              <span className="font-semibold text-[var(--text-primary)]">{entry.value}</span>
+            </div>
+          ))}
+        </div>
       </div>
     </ChartCard>
   );
@@ -207,7 +247,10 @@ const RequestTypesChart = ({ requests }: { requests: CreativeRequest[] }) => {
 
 const ActiveByPriorityChart = ({ requests }: { requests: CreativeRequest[] }) => {
   const data = useMemo(() => {
-    const active = requests.filter((r) => r.status !== 'closed' && r.status !== 'deleted');
+    // Active = not truly closed AND not deleted (re-edit tasks count as active)
+    const active = requests.filter((r) =>
+      r.status !== 'deleted' && (r.status !== 'closed' || r.isInReEdit)
+    );
     return ['low', 'medium', 'high', 'urgent'].map((p) => ({
       priority: p.charAt(0).toUpperCase() + p.slice(1),
       count: active.filter((r) => r.priority === p).length,
@@ -218,15 +261,16 @@ const ActiveByPriorityChart = ({ requests }: { requests: CreativeRequest[] }) =>
     <ChartCard title="Active Requests by Priority">
       <ResponsiveContainer width="100%" height={200}>
         <BarChart data={data} margin={{ top: 5, right: 10, bottom: 5, left: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+          <CartesianGrid strokeDasharray="3 3" stroke="#CBD5E1" />
           <XAxis dataKey="priority" tick={{ fontSize: 11, fill: 'var(--text-tertiary)' }} />
           <YAxis tick={{ fontSize: 11, fill: 'var(--text-tertiary)' }} />
           <Tooltip
             contentStyle={{
-              backgroundColor: 'var(--surface)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-md)',
+              backgroundColor: '#FFFFFF',
+              border: '2.5px solid #1E293B',
+              borderRadius: '12px',
               fontSize: 12,
+              boxShadow: '3px 3px 0px #1E293B',
             }}
           />
           <Bar dataKey="count" fill={PRIORITY_BAR_COLOR} radius={[4, 4, 0, 0]} />
@@ -240,21 +284,44 @@ const ActiveByPriorityChart = ({ requests }: { requests: CreativeRequest[] }) =>
 // DUE DATE COMPLIANCE (Donut Chart)
 // ============================================
 
+/** Get the effective deadline: latest pending re-edit deadline, or original dueDate */
+const getEffectiveDeadline = (r: CreativeRequest): string | null => {
+  if (r.reEdits.length > 0) {
+    const latest = r.reEdits[r.reEdits.length - 1];
+    if (!latest.submittedAt) return latest.deadline;
+  }
+  return r.dueDate;
+};
+
 const DueDateComplianceChart = ({ requests }: { requests: CreativeRequest[] }) => {
   const { onTime, late, total, pct } = useMemo(() => {
-    const withDue = requests.filter((r) => r.dueDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Include requests with either a dueDate or a pending re-edit deadline
+    const withDue = requests.filter((r) => {
+      if (r.status === 'deleted') return false;
+      return getEffectiveDeadline(r) !== null;
+    });
+
     const onTimeCount = withDue.filter((r) => {
-      if (r.status === 'closed') {
-        // Closed before or on due date — simplified: created + reasonable time <= dueDate
-        return new Date(r.createdAt) <= new Date(r.dueDate!);
-      }
-      // Active: not past due
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const due = new Date(r.dueDate!);
+      const deadline = getEffectiveDeadline(r)!;
+      const due = new Date(deadline);
       due.setHours(0, 0, 0, 0);
+
+      if (r.status === 'closed' && !r.isInReEdit) {
+        // Truly closed: check if closedAt was before the deadline
+        if (r.closedAt) {
+          const closed = new Date(r.closedAt);
+          closed.setHours(0, 0, 0, 0);
+          return closed <= due;
+        }
+        return true; // No closedAt data — assume on time
+      }
+      // Active or re-edit requests: on time if deadline hasn't passed
       return due >= today;
     }).length;
+
     const lateCount = withDue.length - onTimeCount;
     return {
       onTime: onTimeCount,
@@ -293,7 +360,7 @@ const DueDateComplianceChart = ({ requests }: { requests: CreativeRequest[] }) =
           </ResponsiveContainer>
         </div>
         <div className="text-right">
-          <p className="text-3xl font-bold text-red-500">{pct}%</p>
+          <p className={`text-3xl font-bold ${pct >= 70 ? 'text-green-500' : pct >= 40 ? 'text-amber-500' : 'text-red-500'}`}>{pct}%</p>
           <p className="text-xs text-[var(--text-tertiary)]">Compliance Rate</p>
           <p className="mt-1 text-xs text-[var(--text-tertiary)]">{onTime}/{total} on time</p>
         </div>
@@ -306,19 +373,36 @@ const DueDateComplianceChart = ({ requests }: { requests: CreativeRequest[] }) =
 // REQUEST STATUS DISTRIBUTION (Donut Chart)
 // ============================================
 
+const STATUS_LABELS: Record<string, string> = {
+  open: 'Open',
+  in_progress: 'In Progress',
+  review: 'Review',
+  closed: 'Closed',
+  re_edit: 'Re-Edit',
+};
+
+const DISPLAY_STATUSES = ['open', 'in_progress', 'review', 'closed', 're_edit'] as const;
+
 const StatusDistributionChart = ({ requests }: { requests: CreativeRequest[] }) => {
   const data = useMemo(() => {
-    const statusCounts: Record<string, number> = {};
+    const statusCounts: Record<string, number> = {
+      open: 0, in_progress: 0, review: 0, closed: 0, re_edit: 0,
+    };
     for (const r of requests) {
-      statusCounts[r.status] = (statusCounts[r.status] || 0) + 1;
+      if (r.status === 'deleted') continue;
+      if (r.isInReEdit) {
+        // Tasks in re-edit cycle count as "Re-Edit" regardless of current status
+        statusCounts.re_edit++;
+      } else {
+        statusCounts[r.status] = (statusCounts[r.status] || 0) + 1;
+      }
     }
-    return Object.entries(statusCounts)
-      .filter(([, count]) => count > 0)
-      .map(([status, count]) => ({
-        name: status === 'in_progress' ? 'In Progress' : status.charAt(0).toUpperCase() + status.slice(1),
-        value: count,
-        color: STATUS_COLORS[status] || CHART_COLORS.gray,
-      }));
+    const allColors: Record<string, string> = { ...STATUS_COLORS, re_edit: CHART_COLORS.reEdit };
+    return DISPLAY_STATUSES.map((status) => ({
+      name: STATUS_LABELS[status],
+      value: statusCounts[status] || 0,
+      color: allColors[status],
+    })).filter((d) => d.value > 0);
   }, [requests]);
 
   return (
@@ -347,71 +431,6 @@ const StatusDistributionChart = ({ requests }: { requests: CreativeRequest[] }) 
   );
 };
 
-// ============================================
-// AVG RESOLUTION TIME (Bar Chart)
-// ============================================
-
-const AvgResolutionTimeChart = ({ requests, from, to }: { requests: CreativeRequest[]; from: Date; to: Date }) => {
-  const data = useMemo(() => {
-    const closed = requests.filter((r) => r.status === 'closed' && r.dueDate);
-    const weeks: { label: string; avgHours: number }[] = [];
-    const current = new Date(from);
-    current.setDate(current.getDate() - current.getDay());
-
-    while (current <= to) {
-      const weekEnd = new Date(current);
-      weekEnd.setDate(weekEnd.getDate() + 6);
-      weekEnd.setHours(23, 59, 59, 999);
-
-      const weekClosed = closed.filter((r) => {
-        const d = new Date(r.createdAt);
-        return d >= current && d <= weekEnd;
-      });
-
-      const avgHours = weekClosed.length > 0
-        ? Math.round(weekClosed.reduce((sum, r) => {
-            const created = new Date(r.createdAt);
-            const due = new Date(r.dueDate!);
-            const hours = Math.abs(daysBetween(created, due)) * 24;
-            return sum + Math.max(hours, 24);
-          }, 0) / weekClosed.length)
-        : 0;
-
-      weeks.push({ label: formatWeekLabel(current), avgHours });
-
-      const next = new Date(current);
-      next.setDate(next.getDate() + 7);
-      current.setTime(next.getTime());
-    }
-
-    return weeks;
-  }, [requests, from, to]);
-
-  const fromLabel = formatWeekLabel(from);
-  const toLabel = formatWeekLabel(to);
-
-  return (
-    <ChartCard title={`Avg Resolution Time (${fromLabel} - ${toLabel})`}>
-      <ResponsiveContainer width="100%" height={260}>
-        <BarChart data={data} margin={{ top: 5, right: 10, bottom: 5, left: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-          <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'var(--text-tertiary)' }} />
-          <YAxis tick={{ fontSize: 11, fill: 'var(--text-tertiary)' }} label={{ value: 'Hours', angle: -90, position: 'insideLeft', style: { fontSize: 11, fill: 'var(--text-tertiary)' } }} />
-          <Tooltip
-            contentStyle={{
-              backgroundColor: 'var(--surface)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-md)',
-              fontSize: 12,
-            }}
-            formatter={(value) => [`${value}h`, 'Avg Time']}
-          />
-          <Bar dataKey="avgHours" fill={CHART_COLORS.purple} radius={[4, 4, 0, 0]} />
-        </BarChart>
-      </ResponsiveContainer>
-    </ChartCard>
-  );
-};
 
 // ============================================
 // TOP REQUESTERS (Horizontal Bar Chart)
@@ -422,8 +441,13 @@ const REQUESTER_COLORS = [CHART_COLORS.green, CHART_COLORS.blue, CHART_COLORS.pu
 const TopRequestersChart = ({ requests }: { requests: CreativeRequest[] }) => {
   const data = useMemo(() => {
     const counts: Record<string, number> = {};
+    const reEditCounts: Record<string, number> = {};
     for (const r of requests) {
       counts[r.requesterName] = (counts[r.requesterName] || 0) + 1;
+      // Count re-edits requested by this person (both admin-initiated and requester-initiated)
+      const reEditsForRequest = r.reEdits.length;
+      const reEditReqs = r.reEditRequests?.filter((req) => req.requestedById === r.requesterId).length ?? 0;
+      reEditCounts[r.requesterName] = (reEditCounts[r.requesterName] || 0) + reEditsForRequest + reEditReqs;
     }
     return Object.entries(counts)
       .sort((a, b) => b[1] - a[1])
@@ -432,6 +456,7 @@ const TopRequestersChart = ({ requests }: { requests: CreativeRequest[] }) => {
         name: name.length > 12 ? name.slice(0, 12) + '...' : name,
         fullName: name,
         count,
+        reEdits: reEditCounts[name] || 0,
         fill: REQUESTER_COLORS[i % REQUESTER_COLORS.length],
       }));
   }, [requests]);
@@ -450,12 +475,23 @@ const TopRequestersChart = ({ requests }: { requests: CreativeRequest[] }) => {
           />
           <Tooltip
             contentStyle={{
-              backgroundColor: 'var(--surface)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-md)',
+              backgroundColor: '#FFFFFF',
+              border: '2.5px solid #1E293B',
+              borderRadius: '12px',
               fontSize: 12,
+              boxShadow: '3px 3px 0px #1E293B',
             }}
-            formatter={(value) => [value, 'Requests']}
+            content={({ active, payload }) => {
+              if (!active || !payload || payload.length === 0) return null;
+              const item = payload[0].payload as (typeof data)[number];
+              return (
+                <div className="rounded-xl border-[2px] border-[var(--navy)] bg-[var(--surface)] p-2.5 shadow-[2px_2px_0px_#1E293B]">
+                  <p className="text-xs font-medium text-[var(--text-primary)]">{item.fullName}</p>
+                  <p className="text-xs text-[var(--text-secondary)]">Requests: {item.count}</p>
+                  <p className="text-xs text-amber-600">Re-Edits: {item.reEdits}</p>
+                </div>
+              );
+            }}
           />
           <Bar dataKey="count" radius={[0, 4, 4, 0]}>
             {data.map((entry, i) => (
@@ -464,152 +500,6 @@ const TopRequestersChart = ({ requests }: { requests: CreativeRequest[] }) => {
           </Bar>
         </BarChart>
       </ResponsiveContainer>
-    </ChartCard>
-  );
-};
-
-// ============================================
-// BOTTLENECK ANALYSIS
-// ============================================
-
-const BOTTLENECK_NO_PROGRESS_DAYS = 3;
-
-interface BottleneckItem {
-  type: 'review' | 'unassigned' | 'no_progress';
-  label: string;
-  badgeColor: string;
-  bgColor: string;
-  count: number;
-  requestIds: string[];
-}
-
-const BottleneckAnalysis = ({ requests }: { requests: CreativeRequest[] }) => {
-  const bottlenecks = useMemo((): BottleneckItem[] => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const reviewStuck = requests.filter((r) => r.status === 'review');
-    const unassigned = requests.filter((r) => r.status !== 'closed' && r.status !== 'deleted' && !r.assigneeId);
-    const noProgress = requests.filter((r) => {
-      if (r.status === 'closed' || r.assigneeId) return false;
-      const created = new Date(r.createdAt);
-      return daysBetween(created, today) >= BOTTLENECK_NO_PROGRESS_DAYS;
-    });
-
-    return [
-      {
-        type: 'review',
-        label: 'Review Bottleneck',
-        badgeColor: 'bg-red-100 text-red-700 border border-red-200',
-        bgColor: 'bg-red-50',
-        count: reviewStuck.length,
-        requestIds: reviewStuck.map((r) => r.id.toUpperCase().replace('R', 'REQ-')),
-      },
-      {
-        type: 'unassigned',
-        label: 'Unassigned',
-        badgeColor: 'bg-amber-100 text-amber-700 border border-amber-200',
-        bgColor: 'bg-amber-50',
-        count: unassigned.length,
-        requestIds: unassigned.map((r) => r.id.toUpperCase().replace('R', 'REQ-')),
-      },
-      {
-        type: 'no_progress',
-        label: 'No Progress',
-        badgeColor: 'bg-red-100 text-red-700 border border-red-200',
-        bgColor: 'bg-red-50',
-        count: noProgress.length,
-        requestIds: noProgress.map((r) => r.id.toUpperCase().replace('R', 'REQ-')),
-      },
-    ];
-  }, [requests]);
-
-  return (
-    <ChartCard title="Bottleneck Analysis" icon={<ClockAlertIcon />}>
-      <div className="space-y-3">
-        {bottlenecks.map((b) => {
-          const displayIds = b.requestIds.slice(0, 3);
-          const remaining = b.requestIds.length - 3;
-          return (
-            <div key={b.type} className={`rounded-[var(--radius-md)] ${b.bgColor} p-3`}>
-              <div className="flex items-center gap-2">
-                <span className={`inline-flex rounded px-2 py-0.5 text-xs font-semibold ${b.badgeColor}`}>
-                  {b.label}
-                </span>
-                <span className="text-sm font-medium text-[var(--text-primary)]">
-                  {b.count} requests
-                </span>
-              </div>
-              <p className="mt-1 text-xs text-[var(--text-tertiary)]">
-                {displayIds.join(', ')}
-                {remaining > 0 && ` +${remaining} more`}
-                {b.type === 'no_progress' && ` — Open for ${BOTTLENECK_NO_PROGRESS_DAYS}+ days without assignment`}
-              </p>
-            </div>
-          );
-        })}
-      </div>
-    </ChartCard>
-  );
-};
-
-// ============================================
-// AGING REQUESTS
-// ============================================
-
-const AgingRequests = ({ requests }: { requests: CreativeRequest[] }) => {
-  const agingItems = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    return requests
-      .filter((r) => r.status !== 'closed' && r.status !== 'deleted')
-      .map((r) => {
-        const created = new Date(r.createdAt);
-        const age = daysBetween(created, today);
-        return { ...r, age };
-      })
-      .sort((a, b) => b.age - a.age)
-      .slice(0, 5);
-  }, [requests]);
-
-  const statusBadge = (status: string) => {
-    const colors: Record<string, string> = {
-      open: 'bg-gray-100 text-gray-700',
-      in_progress: 'bg-amber-100 text-amber-700',
-      review: 'bg-purple-100 text-purple-700',
-    };
-    return colors[status] || 'bg-gray-100 text-gray-600';
-  };
-
-  return (
-    <ChartCard title="Aging Requests" icon={<ClockAlertIcon />}>
-      <div className="space-y-2">
-        {agingItems.map((item) => (
-          <div
-            key={item.id}
-            className="flex items-center justify-between rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-4 py-3"
-          >
-            <div>
-              <p className="text-sm font-medium text-[var(--text-primary)]">
-                {item.id.toUpperCase().replace('R', 'REQ-')}
-              </p>
-              <p className="text-xs text-[var(--text-tertiary)]">{item.title}</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${statusBadge(item.status)}`}>
-                {item.status === 'in_progress' ? 'in progress' : item.status}
-              </span>
-              <span className="text-xs font-medium text-[var(--text-tertiary)]">
-                {item.age}d old
-              </span>
-            </div>
-          </div>
-        ))}
-        {agingItems.length === 0 && (
-          <p className="py-4 text-center text-sm text-[var(--text-tertiary)]">No aging requests</p>
-        )}
-      </div>
     </ChartCard>
   );
 };
@@ -636,19 +526,10 @@ export const DashboardOverview = ({ requests, from, to }: DashboardOverviewProps
       <DueDateComplianceChart requests={requests} />
     </div>
 
-    {/* Row 3: Status Distribution + Resolution Time */}
+    {/* Row 3: Status Distribution + Top Requesters */}
     <div className="grid gap-6 md:grid-cols-2">
       <StatusDistributionChart requests={requests} />
-      <AvgResolutionTimeChart requests={requests} from={from} to={to} />
-    </div>
-
-    {/* Row 4: Top Requesters + Bottleneck Analysis */}
-    <div className="grid gap-6 md:grid-cols-2">
       <TopRequestersChart requests={requests} />
-      <BottleneckAnalysis requests={requests} />
     </div>
-
-    {/* Row 5: Aging Requests */}
-    <AgingRequests requests={requests} />
   </div>
 );

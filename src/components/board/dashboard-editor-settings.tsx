@@ -160,14 +160,15 @@ interface EditorRowProps {
 }
 
 const EditorRow = ({ editor }: EditorRowProps) => {
-  const { getEditorSettings, setSpecialization } = useEditorSettingsStore();
+  const getEditorSettings = useEditorSettingsStore((s) => s.getEditorSettings);
+  const saveBothSpecializations = useEditorSettingsStore((s) => s.saveBothSpecializations);
   const settings = getEditorSettings(editor.id);
 
   const [localP1, setLocalP1] = useState<EditorSpecialization>(settings.p1);
   const [localP2, setLocalP2] = useState<EditorSpecialization>(settings.p2);
   const [saved, setSaved] = useState(false);
 
-  // Sync local state when store changes externally
+  // Sync local state when store changes externally (including realtime updates)
   useEffect(() => {
     setLocalP1(settings.p1);
     setLocalP2(settings.p2);
@@ -175,13 +176,12 @@ const EditorRow = ({ editor }: EditorRowProps) => {
 
   const hasChanges = localP1 !== settings.p1 || localP2 !== settings.p2;
 
-  const handleSave = useCallback(() => {
-    setSpecialization(editor.id, 'p1', localP1);
-    setSpecialization(editor.id, 'p2', localP2);
+  const handleSave = useCallback(async () => {
+    await saveBothSpecializations(editor.id, localP1, localP2);
     setSaved(true);
     const timer = setTimeout(() => setSaved(false), 1500);
     return () => clearTimeout(timer);
-  }, [editor.id, localP1, localP2, setSpecialization]);
+  }, [editor.id, localP1, localP2, saveBothSpecializations]);
 
   const roleTitle = SPECIALIZATION_ROLE_TITLES[localP1];
 

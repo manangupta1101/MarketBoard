@@ -1,9 +1,12 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import dynamic from 'next/dynamic';
 import type { CreativeRequest } from '@/types';
+import { useCallback } from 'react';
 import { useAuthStore } from '@/stores/auth-store';
 import { useRequestStore } from '@/stores/request-store';
+import { useNotesStore } from '@/stores/notes-store';
 import { AppHeader } from '@/components/layout/app-header';
 import { TabToggle } from '@/components/ui/tab-toggle';
 import { KanbanBoard } from '@/components/board/kanban-board';
@@ -13,7 +16,13 @@ import { RequestDetailModal } from '@/components/board/request-detail-modal';
 import { NewRequestModal } from '@/components/board/new-request-modal';
 import { TeamPanel } from '@/components/board/team-panel';
 
-type ViewTab = 'kanban' | 'list' | 'dashboard';
+// Lazy-load NotesView — BlockNote/TipTap has heavy deps that break static analysis
+const NotesView = dynamic(
+  () => import('@/components/notes/notes-view').then((m) => ({ default: m.NotesView })),
+  { ssr: false, loading: () => <div className="flex items-center justify-center py-20"><div className="h-6 w-6 animate-spin rounded-full border-2 border-[var(--primary)] border-t-transparent" /></div> }
+);
+
+type ViewTab = 'kanban' | 'list' | 'dashboard' | 'notes';
 
 export default function BoardPage() {
   const user = useAuthStore((s) => s.user);
@@ -37,6 +46,7 @@ export default function BoardPage() {
     if (user.role === 'owner' || user.role === 'admin') {
       base.push({ value: 'dashboard', label: 'Dashboard' });
     }
+    base.push({ value: 'notes', label: 'Notes' });
     return base;
   }, [user.role]);
 
@@ -51,8 +61,9 @@ export default function BoardPage() {
         // Editor sees only requests assigned to them
         return allRequests.filter((r) => r.assigneeId === user.id);
       case 'member':
-        // Member sees only their own requests
-        return allRequests.filter((r) => r.requesterId === user.id);
+        // Member sees requests they created OR that are assigned to them
+        // (preserves visibility if demoted from editor)
+        return allRequests.filter((r) => r.requesterId === user.id || r.assigneeId === user.id);
       default:
         return [];
     }
@@ -70,6 +81,13 @@ export default function BoardPage() {
     setSelectedRequest(null);
   };
 
+  const setActiveNote = useNotesStore((s) => s.setActiveNote);
+
+  const handleNavigateToNote = useCallback((noteId: string) => {
+    setActiveNote(noteId);
+    setActiveTab('notes');
+  }, [setActiveNote]);
+
   return (
     <div className="min-h-screen bg-[var(--background)]">
       <AppHeader
@@ -77,9 +95,9 @@ export default function BoardPage() {
         onToggleTeamPanel={() => setTeamPanelOpen((prev) => !prev)}
       />
 
-      <main className="mx-auto w-full max-w-[1400px] px-6 py-6 lg:px-8">
+      <main className="mx-auto w-full max-w-[1400px] px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
         {/* Tabs */}
-        <div className="mb-6">
+        <div className="mb-4 sm:mb-6">
           <TabToggle
             options={tabOptions}
             value={activeTab}
@@ -89,8 +107,8 @@ export default function BoardPage() {
 
         {/* Member info banner */}
         {user.role === 'member' && (
-          <div className="mb-6 rounded-[var(--radius-md)] bg-[var(--primary-light)] px-4 py-3">
-            <p className="text-sm text-[var(--primary)]">
+          <div className="mb-4 rounded-[var(--radius-lg)] border-2 border-[var(--primary)] bg-[var(--primary-light)] px-4 py-3 sm:mb-6">
+            <p className="text-sm font-medium text-[var(--primary)]">
               You can create new requests and track their status here. Your requests will be assigned to an editor by an admin.
             </p>
           </div>
@@ -106,7 +124,11 @@ export default function BoardPage() {
         )}
 
         {activeTab === 'dashboard' && (user.role === 'owner' || user.role === 'admin') && (
-          <DashboardView requests={allRequests} />
+          <DashboardView requests={allRequests} onRequestClick={handleCardClick} />
+        )}
+
+        {activeTab === 'notes' && (
+          <NotesView />
         )}
       </main>
 
@@ -115,6 +137,7 @@ export default function BoardPage() {
         request={selectedRequest}
         open={detailOpen}
         onClose={handleCloseDetail}
+        onNavigateToNote={handleNavigateToNote}
       />
 
       <NewRequestModal

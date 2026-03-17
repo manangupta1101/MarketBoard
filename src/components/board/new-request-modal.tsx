@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
+import { useState, useMemo, useRef, useEffect, type ReactNode } from 'react';
 import type { RequestType, RequestPriority, CreativeRequest } from '@/types';
 import { REQUEST_PRIORITIES } from '@/types';
 import { Modal } from '@/components/ui/modal';
@@ -10,6 +10,7 @@ import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { useRequestStore } from '@/stores/request-store';
 import { useAuthStore } from '@/stores/auth-store';
+import { useNotesStore } from '@/stores/notes-store';
 
 const TYPE_CARDS: { value: RequestType; label: string; icon: ReactNode }[] = [
   {
@@ -76,6 +77,139 @@ const TYPE_CARDS: { value: RequestType; label: string; icon: ReactNode }[] = [
   },
 ];
 
+// ── Searchable Script Dropdown ─────────────────────────────
+interface ScriptSearchDropdownProps {
+  notes: { id: string; title: string; createdByName: string }[];
+  value: string | null;
+  onChange: (id: string | null) => void;
+}
+
+const ScriptSearchDropdown = ({ notes, value, onChange }: ScriptSearchDropdownProps) => {
+  const [search, setSearch] = useState('');
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const selectedNote = useMemo(() => notes.find((n) => n.id === value), [notes, value]);
+
+  const filtered = useMemo(() => {
+    if (!search.trim()) return notes;
+    const q = search.toLowerCase();
+    return notes.filter(
+      (n) => n.title.toLowerCase().includes(q) || n.createdByName.toLowerCase().includes(q),
+    );
+  }, [notes, search]);
+
+  // Close on outside click
+  useEffect(() => {
+    const handle = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handle);
+    return () => document.removeEventListener('mousedown', handle);
+  }, []);
+
+  return (
+    <div ref={containerRef} className="relative">
+      <label className="mb-1.5 block text-sm font-bold text-[var(--text-primary)]">
+        Attach Script (Optional)
+      </label>
+
+      {/* Trigger / selected display */}
+      <button
+        type="button"
+        onClick={() => setIsOpen((o) => !o)}
+        className={`flex w-full items-center justify-between rounded-xl border-2 bg-[var(--surface)] px-4 py-2.5 text-left text-sm transition-all ${
+          isOpen ? 'border-[var(--primary)]' : 'border-[var(--navy)]'
+        }`}
+      >
+        <span className={selectedNote ? 'text-[var(--text-primary)]' : 'text-[var(--text-tertiary)]'}>
+          {selectedNote ? `${selectedNote.title} — by ${selectedNote.createdByName}` : 'Search or select a script...'}
+        </span>
+        <div className="flex items-center gap-1">
+          {selectedNote && (
+            <span
+              onClick={(e) => { e.stopPropagation(); onChange(null); setSearch(''); }}
+              className="rounded-full p-0.5 hover:bg-[var(--error-light)] hover:text-[var(--error)]"
+              role="button"
+              aria-label="Clear selection"
+            >
+              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </span>
+          )}
+          <svg className={`h-4 w-4 text-[var(--text-tertiary)] transition-transform ${isOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+          </svg>
+        </div>
+      </button>
+
+      {/* Dropdown */}
+      {isOpen && (
+        <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-xl border-2 border-[var(--navy)] bg-[var(--surface)] shadow-[4px_4px_0px_var(--navy)]">
+          {/* Search input */}
+          <div className="border-b border-[var(--border-light)] px-3 py-2">
+            <div className="flex items-center gap-2 rounded-lg border border-[var(--border-light)] px-2.5 py-1.5">
+              <svg className="h-4 w-4 shrink-0 text-[var(--text-tertiary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search scripts..."
+                className="w-full bg-transparent text-sm text-[var(--text-primary)] outline-none placeholder:text-[var(--text-tertiary)]"
+                autoFocus
+              />
+            </div>
+          </div>
+
+          {/* Options list */}
+          <div className="max-h-48 overflow-y-auto">
+            {filtered.length === 0 ? (
+              <div className="px-4 py-3 text-center text-sm text-[var(--text-tertiary)]">
+                {notes.length === 0
+                  ? 'No scripts yet — mark a note as Script in Notes tab'
+                  : 'No matching scripts found'}
+              </div>
+            ) : (
+              filtered.map((n) => (
+                <button
+                  key={n.id}
+                  type="button"
+                  onClick={() => { onChange(n.id); setIsOpen(false); setSearch(''); }}
+                  className={`flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm transition-colors hover:bg-[var(--surface-hover)] ${
+                    value === n.id ? 'bg-[var(--primary-light)]' : ''
+                  }`}
+                >
+                  <svg className="h-4 w-4 shrink-0 text-[var(--text-secondary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                  </svg>
+                  <div className="min-w-0 flex-1">
+                    <span className="block truncate font-medium text-[var(--text-primary)]">{n.title}</span>
+                    <span className="text-xs text-[var(--text-tertiary)]">by {n.createdByName}</span>
+                  </div>
+                  {value === n.id && (
+                    <svg className="h-4 w-4 shrink-0 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      <p className="mt-1 text-xs text-[var(--text-tertiary)]">
+        Link a script note so the team can view it directly from this request
+      </p>
+    </div>
+  );
+};
+
 interface NewRequestModalProps {
   open: boolean;
   onClose: () => void;
@@ -84,6 +218,7 @@ interface NewRequestModalProps {
 export const NewRequestModal = ({ open, onClose }: NewRequestModalProps) => {
   const user = useAuthStore((s) => s.user);
   const addRequest = useRequestStore((s) => s.addRequest);
+  const allNotes = useNotesStore((s) => s.notes);
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -92,6 +227,7 @@ export const NewRequestModal = ({ open, onClose }: NewRequestModalProps) => {
   const [totalItems, setTotalItems] = useState(0);
   const [dueDate, setDueDate] = useState('');
   const [refLinks, setRefLinks] = useState<string[]>(['']);
+  const [scriptNoteId, setScriptNoteId] = useState<string | null>(null);
 
   if (!user) return null;
 
@@ -103,6 +239,7 @@ export const NewRequestModal = ({ open, onClose }: NewRequestModalProps) => {
     setTotalItems(0);
     setDueDate('');
     setRefLinks(['']);
+    setScriptNoteId(null);
     onClose();
   };
 
@@ -111,7 +248,7 @@ export const NewRequestModal = ({ open, onClose }: NewRequestModalProps) => {
     if (!title.trim()) return;
 
     const newRequest: CreativeRequest = {
-      id: `r_${Date.now()}`,
+      id: crypto.randomUUID(),
       title: title.trim(),
       description: description.trim(),
       type,
@@ -128,9 +265,14 @@ export const NewRequestModal = ({ open, onClose }: NewRequestModalProps) => {
       teamLeadName: null,
       teamLeadEmail: null,
       referenceLinks: refLinks.map((l) => l.trim()).filter(Boolean),
+      scriptNoteId,
       finalLink: null,
       comments: [],
+      reEdits: [],
+      reEditRequests: [],
+      isInReEdit: false,
       createdAt: new Date().toISOString(),
+      closedAt: null,
       deletedById: null,
       deletedByName: null,
       deletedAt: null,
@@ -167,7 +309,7 @@ export const NewRequestModal = ({ open, onClose }: NewRequestModalProps) => {
         <div>
           <label
             htmlFor="req-title"
-            className="mb-1.5 block text-sm font-semibold text-[var(--text-primary)]"
+            className="mb-1.5 block text-sm font-bold text-[var(--text-primary)]"
           >
             Request Title
           </label>
@@ -185,7 +327,7 @@ export const NewRequestModal = ({ open, onClose }: NewRequestModalProps) => {
         <div>
           <label
             htmlFor="req-desc"
-            className="mb-1.5 block text-sm font-semibold text-[var(--text-primary)]"
+            className="mb-1.5 block text-sm font-bold text-[var(--text-primary)]"
           >
             Description
           </label>
@@ -200,7 +342,7 @@ export const NewRequestModal = ({ open, onClose }: NewRequestModalProps) => {
 
         {/* Request Type Cards */}
         <div>
-          <span className="mb-3 block text-sm font-semibold text-[var(--text-primary)]">
+          <span className="mb-3 block text-sm font-bold text-[var(--text-primary)]">
             Request Type
           </span>
           <div className="grid grid-cols-3 gap-3 sm:grid-cols-6">
@@ -210,12 +352,14 @@ export const NewRequestModal = ({ open, onClose }: NewRequestModalProps) => {
                 type="button"
                 onClick={() => setType(card.value)}
                 className={`
-                  flex flex-col items-center gap-2 rounded-[var(--radius-md)] border-2 px-4 py-5
+                  flex flex-col items-center gap-2 rounded-2xl border-[2.5px] px-4 py-5
                   transition-all duration-[var(--transition-fast)] cursor-pointer
+                  shadow-[2px_2px_0px_var(--navy)] hover:-translate-y-0.5 hover:shadow-[3px_3px_0px_var(--navy)]
+                  active:translate-y-0 active:shadow-[1px_1px_0px_var(--navy)]
                   ${
                     type === card.value
-                      ? 'border-[var(--text-primary)] bg-[var(--surface-active)]'
-                      : 'border-[var(--border)] hover:border-[var(--border-hover)]'
+                      ? 'border-[var(--primary)] bg-[var(--primary-light)]'
+                      : 'border-[var(--navy)] hover:border-[var(--primary)]'
                   }
                 `}
                 aria-pressed={type === card.value}
@@ -234,7 +378,7 @@ export const NewRequestModal = ({ open, onClose }: NewRequestModalProps) => {
           <div>
             <label
               htmlFor="req-priority"
-              className="mb-1.5 block text-sm font-semibold text-[var(--text-primary)]"
+              className="mb-1.5 block text-sm font-bold text-[var(--text-primary)]"
             >
               Priority
             </label>
@@ -248,7 +392,7 @@ export const NewRequestModal = ({ open, onClose }: NewRequestModalProps) => {
           <div>
             <label
               htmlFor="req-total-items"
-              className="mb-1.5 block text-sm font-semibold text-[var(--text-primary)]"
+              className="mb-1.5 block text-sm font-bold text-[var(--text-primary)]"
             >
               Total Items to Deliver
             </label>
@@ -263,7 +407,7 @@ export const NewRequestModal = ({ open, onClose }: NewRequestModalProps) => {
           <div>
             <label
               htmlFor="req-due-date"
-              className="mb-1.5 block text-sm font-semibold text-[var(--text-primary)]"
+              className="mb-1.5 block text-sm font-bold text-[var(--text-primary)]"
             >
               Due Date (Optional)
             </label>
@@ -278,7 +422,7 @@ export const NewRequestModal = ({ open, onClose }: NewRequestModalProps) => {
 
         {/* Reference Links */}
         <div>
-          <span className="mb-1.5 block text-sm font-semibold text-[var(--text-primary)]">
+          <span className="mb-1.5 block text-sm font-bold text-[var(--text-primary)]">
             Reference Links (Optional)
           </span>
           <div className="space-y-2">
@@ -297,8 +441,8 @@ export const NewRequestModal = ({ open, onClose }: NewRequestModalProps) => {
                     onClick={() => removeLink(index)}
                     className="
                       flex h-[38px] w-[38px] shrink-0 items-center justify-center
-                      rounded-[var(--radius-md)] border border-[var(--border)]
-                      text-[var(--text-tertiary)] transition-colors
+                      rounded-full border-[2px] border-[var(--border-light)]
+                      text-[var(--text-tertiary)] transition-all
                       hover:border-[var(--error)] hover:text-[var(--error)]
                     "
                     aria-label="Remove link"
@@ -315,21 +459,29 @@ export const NewRequestModal = ({ open, onClose }: NewRequestModalProps) => {
             type="button"
             onClick={addLink}
             className="
-              mt-2 inline-flex items-center gap-1 rounded-[var(--radius-md)]
-              border border-[var(--border)] px-3 py-1.5 text-sm font-medium
-              text-[var(--text-secondary)] transition-colors
-              hover:bg-[var(--surface-hover)]
+              mt-2 inline-flex items-center gap-1 rounded-full
+              border-[2px] border-[var(--navy)] px-3 py-1.5 text-sm font-bold
+              text-[var(--text-secondary)] transition-all
+              hover:bg-[var(--surface-hover)] shadow-[2px_2px_0px_var(--navy)]
+              active:translate-x-[1px] active:translate-y-[1px] active:shadow-[1px_1px_0px_var(--navy)]
             "
           >
             + Add Link
           </button>
         </div>
 
+        {/* Attach Script Note — searchable dropdown */}
+        <ScriptSearchDropdown
+          notes={allNotes.filter((n) => n.isScript)}
+          value={scriptNoteId}
+          onChange={setScriptNoteId}
+        />
+
         {/* Submit */}
         <Button
           type="submit"
           fullWidth
-          className="!bg-[var(--text-primary)] !text-[var(--surface)] hover:!opacity-90 !py-3 !text-base !font-semibold"
+          className="!bg-[var(--navy)] !text-white hover:!opacity-90 !py-3 !text-base !font-bold"
         >
           Submit Request
         </Button>

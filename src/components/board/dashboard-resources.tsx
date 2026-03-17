@@ -136,9 +136,11 @@ function LockIcon() {
 
 interface CredentialsGateProps {
   onUnlock: () => void;
+  isOwner: boolean;
+  onChangePassword: () => void;
 }
 
-const CredentialsGate = ({ onUnlock }: CredentialsGateProps) => {
+const CredentialsGate = ({ onUnlock, isOwner, onChangePassword }: CredentialsGateProps) => {
   const credentialsPassword = useOwnershipStore((s) => s.credentialsPassword);
   const [password, setPassword] = useState('');
   const [error, setError] = useState(false);
@@ -158,7 +160,7 @@ const CredentialsGate = ({ onUnlock }: CredentialsGateProps) => {
   return (
     <div className="flex flex-col items-center justify-center py-16">
       <div
-        className={`w-full max-w-sm rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] p-8 text-center ${
+        className={`w-full max-w-sm rounded-2xl border-[2.5px] border-[var(--navy)] bg-[var(--surface)] p-8 text-center shadow-[var(--shadow-md)] ${
           shake ? 'animate-[shake_0.5s_ease-in-out]' : ''
         }`}
       >
@@ -181,8 +183,8 @@ const CredentialsGate = ({ onUnlock }: CredentialsGateProps) => {
                 if (error) setError(false);
               }}
               placeholder="Enter password"
-              className={`w-full rounded-[var(--radius-md)] border bg-[var(--background)] px-3 py-2.5 text-center text-sm text-[var(--text-primary)] outline-none transition-colors placeholder:text-[var(--text-tertiary)] focus:border-[var(--primary)] ${
-                error ? 'border-red-400' : 'border-[var(--border)] hover:border-[var(--border-hover)]'
+              className={`w-full rounded-xl border-[2px] bg-[var(--background)] px-3 py-2.5 text-center text-sm text-[var(--text-primary)] outline-none transition-colors placeholder:text-[var(--text-tertiary)] focus:border-[var(--primary)] ${
+                error ? 'border-red-400' : 'border-[var(--border-light)] hover:border-[var(--navy)]'
               }`}
               aria-label="Credentials access password"
               autoFocus
@@ -193,11 +195,21 @@ const CredentialsGate = ({ onUnlock }: CredentialsGateProps) => {
           </div>
           <button
             type="submit"
-            className="w-full rounded-[var(--radius-md)] bg-[var(--text-primary)] px-4 py-2.5 text-sm font-medium text-[var(--surface)] transition-opacity hover:opacity-90"
+            className="w-full rounded-full border-[2px] border-[var(--navy)] bg-[var(--navy)] px-4 py-2.5 text-sm font-bold text-white shadow-[var(--shadow-xs)] transition-all hover:bg-[var(--navy-deep)]"
           >
             Unlock Credentials
           </button>
         </form>
+        {isOwner && (
+          <button
+            type="button"
+            onClick={onChangePassword}
+            className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-purple-600 transition-colors hover:text-purple-700"
+          >
+            <KeyIcon />
+            Forgot? Change Password
+          </button>
+        )}
       </div>
     </div>
   );
@@ -213,9 +225,7 @@ interface ChangePasswordModalProps {
 
 const ChangePasswordModal = ({ onClose }: ChangePasswordModalProps) => {
   const setCredentialsPassword = useOwnershipStore((s) => s.setCredentialsPassword);
-  const credentialsPassword = useOwnershipStore((s) => s.credentialsPassword);
 
-  const [currentPass, setCurrentPass] = useState('');
   const [newPass, setNewPass] = useState('');
   const [confirmPass, setConfirmPass] = useState('');
   const [error, setError] = useState('');
@@ -225,20 +235,12 @@ const ChangePasswordModal = ({ onClose }: ChangePasswordModalProps) => {
     e.preventDefault();
     setError('');
 
-    if (currentPass !== credentialsPassword) {
-      setError('Current password is incorrect');
-      return;
-    }
     if (newPass.length < 6) {
       setError('New password must be at least 6 characters');
       return;
     }
     if (newPass !== confirmPass) {
       setError('New passwords do not match');
-      return;
-    }
-    if (newPass === currentPass) {
-      setError('New password must be different from current password');
       return;
     }
 
@@ -248,12 +250,12 @@ const ChangePasswordModal = ({ onClose }: ChangePasswordModalProps) => {
   };
 
   const inputClasses =
-    'w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none transition-colors placeholder:text-[var(--text-tertiary)] hover:border-[var(--border-hover)] focus:border-[var(--primary)]';
+    'w-full rounded-xl border-[2px] border-[var(--border-light)] bg-[var(--background)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none transition-colors placeholder:text-[var(--text-tertiary)] hover:border-[var(--navy)] focus:border-[var(--primary)]';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
       <div
-        className="w-full max-w-sm rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] shadow-xl"
+        className="w-full max-w-sm rounded-2xl border-[2.5px] border-[var(--navy)] bg-[var(--surface)] shadow-[var(--shadow-overlay)]"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -264,7 +266,7 @@ const ChangePasswordModal = ({ onClose }: ChangePasswordModalProps) => {
           <button
             type="button"
             onClick={onClose}
-            className="rounded-[var(--radius-sm)] p-1 text-[var(--text-tertiary)] transition-colors hover:bg-[var(--background)] hover:text-[var(--text-primary)]"
+            className="rounded-lg p-1.5 text-[var(--text-tertiary)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
             aria-label="Close"
           >
             <CloseIcon />
@@ -282,21 +284,9 @@ const ChangePasswordModal = ({ onClose }: ChangePasswordModalProps) => {
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4 px-6 py-5">
-            <div>
-              <label htmlFor="current-pass" className="mb-1.5 block text-sm font-medium text-[var(--text-primary)]">
-                Current Password
-              </label>
-              <input
-                id="current-pass"
-                type="password"
-                value={currentPass}
-                onChange={(e) => setCurrentPass(e.target.value)}
-                placeholder="Enter current password"
-                className={inputClasses}
-                required
-                autoFocus
-              />
-            </div>
+            <p className="text-xs text-[var(--text-tertiary)]">
+              As the owner, you can set a new credentials password directly.
+            </p>
             <div>
               <label htmlFor="new-pass" className="mb-1.5 block text-sm font-medium text-[var(--text-primary)]">
                 New Password
@@ -309,6 +299,7 @@ const ChangePasswordModal = ({ onClose }: ChangePasswordModalProps) => {
                 placeholder="Enter new password"
                 className={inputClasses}
                 required
+                autoFocus
               />
             </div>
             <div>
@@ -330,13 +321,13 @@ const ChangePasswordModal = ({ onClose }: ChangePasswordModalProps) => {
               <button
                 type="button"
                 onClick={onClose}
-                className="rounded-[var(--radius-md)] border border-[var(--border)] px-4 py-2 text-sm font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--background)]"
+                className="rounded-full border-[2px] border-[var(--navy)] px-4 py-2 text-sm font-bold text-[var(--text-secondary)] transition-all hover:bg-[var(--surface-hover)]"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="rounded-[var(--radius-md)] bg-purple-600 px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
+                className="rounded-full border-[2px] border-[var(--navy)] bg-purple-600 px-4 py-2 text-sm font-bold text-white shadow-[var(--shadow-xs)] transition-all hover:bg-purple-700"
               >
                 Update Password
               </button>
@@ -402,12 +393,12 @@ const ResourceModal = ({ category, editingResource, onClose, onSubmit }: Resourc
   };
 
   const inputClasses =
-    'w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none transition-colors placeholder:text-[var(--text-tertiary)] hover:border-[var(--border-hover)] focus:border-[var(--primary)]';
+    'w-full rounded-xl border-[2px] border-[var(--border-light)] bg-[var(--background)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none transition-colors placeholder:text-[var(--text-tertiary)] hover:border-[var(--navy)] focus:border-[var(--primary)]';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
       <div
-        className="w-full max-w-lg rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] shadow-xl"
+        className="w-full max-w-lg rounded-2xl border-[2.5px] border-[var(--navy)] bg-[var(--surface)] shadow-[var(--shadow-overlay)]"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -421,7 +412,7 @@ const ResourceModal = ({ category, editingResource, onClose, onSubmit }: Resourc
           <button
             type="button"
             onClick={onClose}
-            className="rounded-[var(--radius-sm)] p-1 text-[var(--text-tertiary)] transition-colors hover:bg-[var(--background)] hover:text-[var(--text-primary)]"
+            className="rounded-lg p-1.5 text-[var(--text-tertiary)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
             aria-label="Close modal"
           >
             <CloseIcon />
@@ -560,13 +551,13 @@ const ResourceModal = ({ category, editingResource, onClose, onSubmit }: Resourc
             <button
               type="button"
               onClick={onClose}
-              className="rounded-[var(--radius-md)] border border-[var(--border)] px-4 py-2 text-sm font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--background)]"
+              className="rounded-full border-[2px] border-[var(--navy)] px-4 py-2 text-sm font-bold text-[var(--text-secondary)] transition-all hover:bg-[var(--surface-hover)]"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="rounded-[var(--radius-md)] bg-[var(--text-primary)] px-4 py-2 text-sm font-medium text-[var(--surface)] transition-opacity hover:opacity-90"
+              className="rounded-full border-[2px] border-[var(--navy)] bg-[var(--navy)] px-4 py-2 text-sm font-bold text-white shadow-[var(--shadow-xs)] transition-all hover:bg-[var(--navy-deep)]"
             >
               {editingResource ? 'Save Changes' : 'Add Resource'}
             </button>
@@ -590,7 +581,7 @@ interface DeleteConfirmProps {
 const DeleteConfirm = ({ resourceTitle, onConfirm, onCancel }: DeleteConfirmProps) => (
   <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onCancel}>
     <div
-      className="w-full max-w-sm rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-xl"
+      className="w-full max-w-sm rounded-2xl border-[2.5px] border-[var(--navy)] bg-[var(--surface)] p-6 shadow-[var(--shadow-overlay)]"
       onClick={(e) => e.stopPropagation()}
       role="alertdialog"
       aria-modal="true"
@@ -604,14 +595,14 @@ const DeleteConfirm = ({ resourceTitle, onConfirm, onCancel }: DeleteConfirmProp
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-[var(--radius-md)] border border-[var(--border)] px-4 py-2 text-sm font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--background)]"
+          className="rounded-full border-[2px] border-[var(--navy)] px-4 py-2 text-sm font-bold text-[var(--text-secondary)] transition-all hover:bg-[var(--surface-hover)]"
         >
           Cancel
         </button>
         <button
           type="button"
           onClick={onConfirm}
-          className="rounded-[var(--radius-md)] bg-red-600 px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
+          className="rounded-full border-[2px] border-[var(--navy)] bg-red-500 px-4 py-2 text-sm font-bold text-white shadow-[var(--shadow-xs)] transition-all hover:bg-red-600"
         >
           Delete
         </button>
@@ -631,7 +622,7 @@ interface LinkCardProps {
 }
 
 const LinkCard = ({ resource, onEdit, onDelete }: LinkCardProps) => (
-  <div className="group flex items-start justify-between rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] p-4 transition-colors hover:border-[var(--border-hover)]">
+  <div className="group flex items-start justify-between rounded-2xl border-[2.5px] border-[var(--navy)] bg-[var(--surface)] p-4 shadow-[var(--shadow-xs)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[var(--shadow-sm)]">
     <div className="min-w-0 flex-1">
       <div className="flex items-center gap-2">
         <span className="text-[var(--text-tertiary)]"><LinkIcon /></span>
@@ -659,7 +650,7 @@ const LinkCard = ({ resource, onEdit, onDelete }: LinkCardProps) => (
       <button
         type="button"
         onClick={onEdit}
-        className="rounded-[var(--radius-sm)] p-1.5 text-[var(--text-tertiary)] transition-colors hover:bg-[var(--background)] hover:text-[var(--text-primary)]"
+        className="rounded-lg p-1.5 text-[var(--text-tertiary)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
         aria-label={`Edit ${resource.title}`}
       >
         <EditIcon />
@@ -667,7 +658,7 @@ const LinkCard = ({ resource, onEdit, onDelete }: LinkCardProps) => (
       <button
         type="button"
         onClick={onDelete}
-        className="rounded-[var(--radius-sm)] p-1.5 text-[var(--text-tertiary)] transition-colors hover:bg-red-50 hover:text-red-600"
+        className="rounded-lg p-1.5 text-[var(--text-tertiary)] transition-colors hover:bg-red-50 hover:text-red-600"
         aria-label={`Delete ${resource.title}`}
       >
         <TrashIcon />
@@ -677,7 +668,7 @@ const LinkCard = ({ resource, onEdit, onDelete }: LinkCardProps) => (
 );
 
 const AssetCard = ({ resource, onEdit, onDelete }: LinkCardProps) => (
-  <div className="group flex items-start justify-between rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] p-4 transition-colors hover:border-[var(--border-hover)]">
+  <div className="group flex items-start justify-between rounded-2xl border-[2.5px] border-[var(--navy)] bg-[var(--surface)] p-4 shadow-[var(--shadow-xs)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[var(--shadow-sm)]">
     <div className="min-w-0 flex-1">
       <div className="flex items-center gap-2">
         <span className="text-[var(--text-tertiary)]"><ImageIcon /></span>
@@ -707,7 +698,7 @@ const AssetCard = ({ resource, onEdit, onDelete }: LinkCardProps) => (
       <button
         type="button"
         onClick={onEdit}
-        className="rounded-[var(--radius-sm)] p-1.5 text-[var(--text-tertiary)] transition-colors hover:bg-[var(--background)] hover:text-[var(--text-primary)]"
+        className="rounded-lg p-1.5 text-[var(--text-tertiary)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
         aria-label={`Edit ${resource.title}`}
       >
         <EditIcon />
@@ -715,7 +706,7 @@ const AssetCard = ({ resource, onEdit, onDelete }: LinkCardProps) => (
       <button
         type="button"
         onClick={onDelete}
-        className="rounded-[var(--radius-sm)] p-1.5 text-[var(--text-tertiary)] transition-colors hover:bg-red-50 hover:text-red-600"
+        className="rounded-lg p-1.5 text-[var(--text-tertiary)] transition-colors hover:bg-red-50 hover:text-red-600"
         aria-label={`Delete ${resource.title}`}
       >
         <TrashIcon />
@@ -745,7 +736,7 @@ const CredentialCard = ({ resource, onEdit, onDelete }: CredentialCardProps) => 
   }, []);
 
   return (
-    <div className="group rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] p-4 transition-colors hover:border-[var(--border-hover)]">
+    <div className="group rounded-2xl border-[2.5px] border-[var(--navy)] bg-[var(--surface)] p-4 shadow-[var(--shadow-xs)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[var(--shadow-sm)]">
       <div className="flex items-start justify-between">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
@@ -760,7 +751,7 @@ const CredentialCard = ({ resource, onEdit, onDelete }: CredentialCardProps) => 
           <button
             type="button"
             onClick={onEdit}
-            className="rounded-[var(--radius-sm)] p-1.5 text-[var(--text-tertiary)] transition-colors hover:bg-[var(--background)] hover:text-[var(--text-primary)]"
+            className="rounded-lg p-1.5 text-[var(--text-tertiary)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
             aria-label={`Edit ${resource.title}`}
           >
             <EditIcon />
@@ -768,7 +759,7 @@ const CredentialCard = ({ resource, onEdit, onDelete }: CredentialCardProps) => 
           <button
             type="button"
             onClick={onDelete}
-            className="rounded-[var(--radius-sm)] p-1.5 text-[var(--text-tertiary)] transition-colors hover:bg-red-50 hover:text-red-600"
+            className="rounded-lg p-1.5 text-[var(--text-tertiary)] transition-colors hover:bg-red-50 hover:text-red-600"
             aria-label={`Delete ${resource.title}`}
           >
             <TrashIcon />
@@ -923,7 +914,7 @@ export const DashboardResources = () => {
       } else {
         const now = new Date().toISOString();
         addResource({
-          id: `res_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          id: crypto.randomUUID(),
           title: data.title.trim(),
           description: data.description.trim(),
           category: activeCategory,
@@ -976,14 +967,14 @@ export const DashboardResources = () => {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-bold text-[var(--text-primary)]">Resources</h2>
+        <h2 className="text-lg font-extrabold text-[var(--text-primary)]">Resources</h2>
         <div className="flex items-center gap-2">
           {/* Change Password — owners only, when credentials tab is active and unlocked */}
           {isOwner && activeCategory === 'credentials' && credentialsUnlocked && (
             <button
               type="button"
               onClick={() => setShowChangePassword(true)}
-              className="inline-flex items-center gap-1.5 rounded-[var(--radius-md)] border border-purple-200 bg-purple-50 px-3 py-2 text-sm font-medium text-purple-700 transition-colors hover:bg-purple-100"
+              className="inline-flex items-center gap-1.5 rounded-full border-[2px] border-purple-400 bg-purple-50 px-3 py-2 text-sm font-bold text-purple-700 transition-colors hover:bg-purple-100"
             >
               <KeyIcon />
               Change Password
@@ -993,7 +984,7 @@ export const DashboardResources = () => {
             <button
               type="button"
               onClick={handleAddClick}
-              className="inline-flex items-center gap-2 rounded-[var(--radius-md)] bg-[var(--text-primary)] px-4 py-2 text-sm font-medium text-[var(--surface)] transition-opacity hover:opacity-90"
+              className="inline-flex items-center gap-2 rounded-full border-[2px] border-[var(--navy)] bg-[var(--navy)] px-4 py-2 text-sm font-bold text-white shadow-[var(--shadow-xs)] transition-all hover:bg-[var(--navy-deep)]"
             >
               <PlusIcon />
               Add Resource
@@ -1003,8 +994,8 @@ export const DashboardResources = () => {
       </div>
 
       {/* Category Tabs */}
-      <div className="border-b border-[var(--border)]">
-        <nav className="grid grid-cols-3" role="tablist" aria-label="Resource categories">
+      <div className="rounded-2xl border-[2.5px] border-[var(--navy)] bg-[var(--surface)] p-1 shadow-[var(--shadow-xs)]">
+        <nav className="grid grid-cols-3 gap-1" role="tablist" aria-label="Resource categories">
           {RESOURCE_TABS.map((tab) => (
             <button
               key={tab.value}
@@ -1013,17 +1004,17 @@ export const DashboardResources = () => {
               aria-selected={activeCategory === tab.value}
               onClick={() => setActiveCategory(tab.value)}
               className={`
-                flex items-center justify-center gap-2 py-3 text-sm font-medium
-                transition-colors duration-[var(--transition-fast)]
+                flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-bold
+                transition-all duration-200
                 ${
                   activeCategory === tab.value
-                    ? 'border-b-2 border-[var(--text-primary)] text-[var(--text-primary)]'
-                    : 'text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]'
+                    ? 'bg-[var(--primary)] text-white'
+                    : 'text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)]'
                 }
               `}
             >
               {tab.icon}
-              {tab.label}
+              <span className="hidden sm:inline">{tab.label}</span>
             </button>
           ))}
         </nav>
@@ -1031,7 +1022,11 @@ export const DashboardResources = () => {
 
       {/* Resource List — credentials tab requires password */}
       {activeCategory === 'credentials' && !credentialsUnlocked ? (
-        <CredentialsGate onUnlock={() => setCredentialsUnlocked(true)} />
+        <CredentialsGate
+          onUnlock={() => setCredentialsUnlocked(true)}
+          isOwner={isOwner}
+          onChangePassword={() => setShowChangePassword(true)}
+        />
       ) : filteredResources.length === 0 ? (
         <EmptyState category={activeCategory} />
       ) : (

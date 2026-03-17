@@ -1,12 +1,15 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useCallback, useRef } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer,
 } from 'recharts';
-import type { CreativeRequest, RequestType } from '@/types';
+import { REQUEST_TYPE_LABELS, SPECIALIZATION_LABELS } from '@/types';
+import type { CreativeRequest, RequestType, EditorSpecialization } from '@/types';
 import type { TeamMemberProfile } from '@/types';
+import { useEditorSettingsStore } from '@/stores/editor-settings-store';
+import { useTeamStore } from '@/stores/team-store';
 
 // ============================================
 // CONSTANTS
@@ -52,10 +55,22 @@ const CATEGORY_TEXT_BG: Record<ContentCategory, { bg: string; text: string }> = 
   Anchor: { bg: 'bg-amber-600', text: 'text-white' },
 };
 
+/** Map EditorSpecialization (from settings store) → ContentCategory (for badges) */
+const SPECIALIZATION_TO_CATEGORY: Record<EditorSpecialization, ContentCategory | null> = {
+  design: 'Design',
+  video: 'Video',
+  ui_ux: 'UI/UX',
+  writing: 'Writing',
+  shooting: 'Shooting',
+  anchor: 'Anchor',
+  none: null,
+};
+
 const CHART_COLORS = {
   inProgress: '#f97316',
   review: '#0f766e',
   completed: '#22c55e',
+  reEdit: '#d97706',
 };
 
 // ============================================
@@ -95,8 +110,8 @@ interface ChartCardProps {
 }
 
 const ChartCard = ({ title, icon, children, className = '' }: ChartCardProps) => (
-  <div className={`rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] p-6 ${className}`}>
-    <h3 className="mb-4 flex items-center gap-2 text-sm font-bold text-[var(--text-primary)]">
+  <div className={`rounded-2xl border-[2.5px] border-[var(--navy)] bg-[var(--surface)] p-6 shadow-[var(--shadow-sm)] ${className}`}>
+    <h3 className="mb-4 flex items-center gap-2 text-sm font-extrabold text-[var(--text-primary)]">
       {icon}
       {title}
     </h3>
@@ -114,17 +129,20 @@ interface EditorStats {
   inProgress: number;
   review: number;
   completed: number;
+  reEdit: number;
   active: number;
   done: number;
-  hours: number;
   onTimeRate: number;
-  score: number;
   primaryCategory: ContentCategory | null;
   secondaryCategory: ContentCategory | null;
   categoryBreakdown: Record<ContentCategory, number>;
   thisWeekCompleted: number;
   itemsPerHour: number;
   timeAccuracy: number;
+  /** Requests delivered on or before the due date */
+  onTimeItems: CreativeRequest[];
+  /** Requests delivered after the due date */
+  lateItems: CreativeRequest[];
   /** Per-category specialization data */
   specializations: {
     category: ContentCategory;
@@ -151,24 +169,47 @@ const computeEditorStats = (
   const weekAgo = new Date(now);
   weekAgo.setDate(weekAgo.getDate() - 7);
 
+  /** Get the effective deadline: latest pending re-edit deadline, or original dueDate */
+  const getEffectiveDeadline = (r: CreativeRequest): string | null => {
+    if (r.reEdits.length > 0) {
+      const latest = r.reEdits[r.reEdits.length - 1];
+      if (!latest.submittedAt) return latest.deadline;
+    }
+    return r.dueDate;
+  };
+
   return members.map((member) => {
     const assigned = requests.filter(
       (r) => r.assigneeId === member.id && r.status !== 'deleted',
     );
 
     const inProgress = assigned.filter((r) => r.status === 'in_progress').length;
-    const review = assigned.filter((r) => r.status === 'review').length;
-    const completed = assigned.filter((r) => r.status === 'closed').length;
+    const review = assigned.filter((r) => r.status === 'review' && !r.isInReEdit).length;
+    // Truly completed: closed AND not in re-edit cycle
+    const completed = assigned.filter((r) => r.status === 'closed' && !r.isInReEdit).length;
+    // Tasks currently in re-edit cycle (any status)
+    const reEdit = assigned.filter((r) => r.isInReEdit).length;
 
-    // On-time calculation
-    const withDueDate = assigned.filter((r) => r.status === 'closed' && r.dueDate);
-    const onTime = withDueDate.filter((r) => {
-      const created = new Date(r.createdAt);
+    // On-time / late calculation using closedAt vs effective deadline
+    const closedWithDue = assigned.filter((r) => r.status === 'closed' && !r.isInReEdit && r.dueDate);
+    const onTimeItems = closedWithDue.filter((r) => {
+      if (!r.closedAt) return false;
+      const closed = new Date(r.closedAt);
+      closed.setHours(0, 0, 0, 0);
       const due = new Date(r.dueDate!);
-      return created <= due;
-    }).length;
-    const onTimeRate = withDueDate.length > 0
-      ? Math.round((onTime / withDueDate.length) * 100)
+      due.setHours(0, 0, 0, 0);
+      return closed <= due;
+    });
+    const lateItems = closedWithDue.filter((r) => {
+      if (!r.closedAt) return true; // no closedAt = treat as late
+      const closed = new Date(r.closedAt);
+      closed.setHours(0, 0, 0, 0);
+      const due = new Date(r.dueDate!);
+      due.setHours(0, 0, 0, 0);
+      return closed > due;
+    });
+    const onTimeRate = closedWithDue.length > 0
+      ? Math.round((onTimeItems.length / closedWithDue.length) * 100)
       : 0;
 
     // Category breakdown
@@ -185,16 +226,16 @@ const computeEditorStats = (
     const primaryCategory = sortedCats[0]?.[0] ?? null;
     const secondaryCategory = sortedCats[1]?.[0] ?? null;
 
-    // This week completed
+    // This week completed (truly closed, not in re-edit)
     const thisWeekCompleted = assigned.filter((r) => {
-      if (r.status !== 'closed') return false;
+      if (r.status !== 'closed' || r.isInReEdit) return false;
       const created = new Date(r.createdAt);
       return created >= weekAgo;
     }).length;
 
-    // Simulated hours (based on items completed, ~1.5h per item for design, ~3h for video)
+    // Items per hour (approximate, truly closed only)
     const totalItems = assigned
-      .filter((r) => r.status === 'closed')
+      .filter((r) => r.status === 'closed' && !r.isInReEdit)
       .reduce((sum, r) => sum + r.totalItems, 0);
     const hours = Math.round(totalItems * 1.8);
     const itemsPerHour = hours > 0 ? Math.round((totalItems / hours) * 10) / 10 : 0;
@@ -202,34 +243,30 @@ const computeEditorStats = (
     // Time accuracy (percentage of on-time items)
     const timeAccuracy = onTimeRate;
 
-    // Score = weighted: 40% completion rate + 30% on-time + 20% volume + 10% variety
-    const completionScore = assigned.length > 0 ? (completed / assigned.length) * 40 : 0;
-    const onTimeScore = onTimeRate * 0.3;
-    const volumeScore = Math.min(completed / 30, 1) * 20; // 30 as benchmark
-    const varietyScore = sortedCats.length >= 2 ? 10 : sortedCats.length * 5;
-    const score = Math.round(completionScore + onTimeScore + volumeScore + varietyScore);
-
     // Specialization data per category
     const specializations = CONTENT_CATEGORIES
       .filter((cat) => categoryBreakdown[cat] > 0)
       .map((cat) => {
         const catRequests = assigned.filter((r) => TYPE_TO_CATEGORY[r.type] === cat);
-        const catCompleted = catRequests.filter((r) => r.status === 'closed').length;
+        const catCompleted = catRequests.filter((r) => r.status === 'closed' && !r.isInReEdit).length;
         const catThisWeek = catRequests.filter((r) => {
-          if (r.status !== 'closed') return false;
+          if (r.status !== 'closed' || r.isInReEdit) return false;
           const created = new Date(r.createdAt);
           return created >= weekAgo;
         }).length;
         const catItems = catRequests
-          .filter((r) => r.status === 'closed')
+          .filter((r) => r.status === 'closed' && !r.isInReEdit)
           .reduce((sum, r) => sum + r.totalItems, 0);
         const catHours = Math.round(catItems * (cat === 'Video' ? 3 : 1.5));
         const catItemsPerHour = catHours > 0 ? Math.round((catItems / catHours) * 10) / 10 : 0;
-        const catWithDue = catRequests.filter((r) => r.status === 'closed' && r.dueDate);
+        const catWithDue = catRequests.filter((r) => r.status === 'closed' && !r.isInReEdit && r.dueDate);
         const catOnTime = catWithDue.filter((r) => {
-          const created = new Date(r.createdAt);
+          if (!r.closedAt) return false;
+          const closed = new Date(r.closedAt);
+          closed.setHours(0, 0, 0, 0);
           const due = new Date(r.dueDate!);
-          return created <= due;
+          due.setHours(0, 0, 0, 0);
+          return closed <= due;
         }).length;
         const catOnTimeRate = catWithDue.length > 0
           ? Math.round((catOnTime / catWithDue.length) * 100)
@@ -254,17 +291,18 @@ const computeEditorStats = (
       inProgress,
       review,
       completed,
+      reEdit,
       active: inProgress + review,
       done: completed,
-      hours,
       onTimeRate,
-      score,
       primaryCategory,
       secondaryCategory,
       categoryBreakdown,
       thisWeekCompleted,
       itemsPerHour,
       timeAccuracy,
+      onTimeItems,
+      lateItems,
       specializations,
     };
   });
@@ -278,7 +316,7 @@ const CategoryBadge = ({ category }: { category: ContentCategory | null }) => {
   if (!category) return <span className="text-sm text-[var(--text-tertiary)]">—</span>;
   const { bg, text } = CATEGORY_TEXT_BG[category];
   return (
-    <span className={`inline-flex items-center rounded-[var(--radius-sm)] px-2.5 py-0.5 text-xs font-medium ${bg} ${text}`}>
+    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-bold ${bg} ${text}`}>
       {category}
     </span>
   );
@@ -320,9 +358,10 @@ const EditorWorkloadChart = ({ editors }: WorkloadChartProps) => {
           fullName: e.name,
           'In Progress': e.inProgress,
           Review: e.review,
+          'Re-Edit': e.reEdit,
           Completed: e.completed,
         }))
-        .reverse(), // reverse so first editor is at top
+        .reverse(),
     [editors],
   );
 
@@ -330,7 +369,7 @@ const EditorWorkloadChart = ({ editors }: WorkloadChartProps) => {
     <ChartCard title="Editor Workload" icon={<BarChartIcon />}>
       <ResponsiveContainer width="100%" height={Math.max(300, editors.length * 40)}>
         <BarChart data={data} layout="vertical" margin={{ top: 0, right: 30, left: 20, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
+          <CartesianGrid strokeDasharray="3 3" stroke="#CBD5E1" horizontal={false} />
           <XAxis type="number" tick={{ fill: 'var(--text-tertiary)', fontSize: 12 }} />
           <YAxis
             type="category"
@@ -340,10 +379,11 @@ const EditorWorkloadChart = ({ editors }: WorkloadChartProps) => {
           />
           <Tooltip
             contentStyle={{
-              backgroundColor: 'var(--surface)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-md)',
+              backgroundColor: '#FFFFFF',
+              border: '2.5px solid #1E293B',
+              borderRadius: '12px',
               fontSize: 13,
+              boxShadow: '3px 3px 0px #1E293B',
             }}
             labelFormatter={(label) => {
               const item = data.find((d) => d.name === String(label));
@@ -357,6 +397,7 @@ const EditorWorkloadChart = ({ editors }: WorkloadChartProps) => {
           />
           <Bar dataKey="In Progress" stackId="a" fill={CHART_COLORS.inProgress} radius={[0, 0, 0, 0]} />
           <Bar dataKey="Review" stackId="a" fill={CHART_COLORS.review} />
+          <Bar dataKey="Re-Edit" stackId="a" fill={CHART_COLORS.reEdit} />
           <Bar dataKey="Completed" stackId="a" fill={CHART_COLORS.completed} radius={[0, 4, 4, 0]} />
         </BarChart>
       </ResponsiveContainer>
@@ -368,57 +409,196 @@ const EditorWorkloadChart = ({ editors }: WorkloadChartProps) => {
 // 2. EDITOR PERFORMANCE TABLE
 // ============================================
 
+/** Unique key for an expanded cell: editorId + column */
+type ExpandedCell = `${string}:${'onTime' | 'late'}` | null;
+
 interface PerformanceTableProps {
   editors: EditorStats[];
 }
 
-const EditorPerformanceTable = ({ editors }: PerformanceTableProps) => (
-  <ChartCard title="Editor Performance" icon={<TrendingUpIcon />}>
-    <div className="overflow-x-auto">
-      <table className="w-full text-left text-sm">
+/** Inline item list shown when clicking on-time / late count */
+const RequestItemList = ({ items }: { items: CreativeRequest[] }) => {
+  if (items.length === 0) {
+    return (
+      <p className="py-3 text-center text-xs text-[var(--text-tertiary)]">No items</p>
+    );
+  }
+
+  return (
+    <div className="max-h-60 overflow-y-auto">
+      <table className="w-full text-left text-xs">
         <thead>
           <tr className="border-b border-[var(--border)]">
-            <th className="pb-3 pr-4 font-medium text-[var(--text-secondary)]">Editor</th>
-            <th className="pb-3 px-4 text-center font-medium text-[var(--text-secondary)]">P1</th>
-            <th className="pb-3 px-4 text-center font-medium text-[var(--text-secondary)]">P2</th>
-            <th className="pb-3 px-4 text-center font-medium text-[var(--text-secondary)]">Active</th>
-            <th className="pb-3 px-4 text-center font-medium text-[var(--text-secondary)]">Done</th>
-            <th className="pb-3 px-4 text-center font-medium text-[var(--text-secondary)]">Hours</th>
-            <th className="pb-3 px-4 text-center font-medium text-[var(--text-secondary)]">On-Time</th>
-            <th className="pb-3 pl-4 text-center font-medium text-[var(--text-secondary)]">Score</th>
+            <th className="pb-2 pr-3 font-medium text-[var(--text-tertiary)]">Title</th>
+            <th className="pb-2 px-3 font-medium text-[var(--text-tertiary)]">Type</th>
+            <th className="pb-2 px-3 font-medium text-[var(--text-tertiary)]">Items</th>
+            <th className="pb-2 px-3 font-medium text-[var(--text-tertiary)]">Due Date</th>
+            <th className="pb-2 pl-3 font-medium text-[var(--text-tertiary)]">Closed</th>
           </tr>
         </thead>
         <tbody>
-          {editors.map((editor) => (
-            <tr
-              key={editor.id}
-              className="border-b border-[var(--border)] last:border-b-0"
-            >
-              <td className="py-3.5 pr-4 font-medium text-[var(--text-primary)]">
-                {editor.name.length > 20 ? editor.name.slice(0, 20) + '…' : editor.name}
+          {items.map((r) => (
+            <tr key={r.id} className="border-b border-[var(--border)] last:border-b-0">
+              <td className="py-2 pr-3 text-[var(--text-primary)]">
+                {r.title.length > 30 ? r.title.slice(0, 30) + '…' : r.title}
               </td>
-              <td className="py-3.5 px-4 text-center">
-                <CategoryBadge category={editor.primaryCategory} />
+              <td className="py-2 px-3 text-[var(--text-secondary)]">
+                {REQUEST_TYPE_LABELS[r.type]}
               </td>
-              <td className="py-3.5 px-4 text-center">
-                <CategoryBadge category={editor.secondaryCategory} />
+              <td className="py-2 px-3 text-center text-[var(--text-primary)]">{r.totalItems}</td>
+              <td className="py-2 px-3 text-[var(--text-secondary)]">
+                {r.dueDate ? new Date(r.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
               </td>
-              <td className="py-3.5 px-4 text-center text-[var(--text-primary)]">{editor.active}</td>
-              <td className="py-3.5 px-4 text-center text-[var(--text-primary)]">{editor.done}</td>
-              <td className="py-3.5 px-4 text-center text-[var(--text-primary)]">{editor.hours}h</td>
-              <td className="py-3.5 px-4 text-center">
-                <PercentBadge value={editor.onTimeRate} />
-              </td>
-              <td className="py-3.5 pl-4 text-center">
-                <PercentBadge value={editor.score} />
+              <td className="py-2 pl-3 text-[var(--text-secondary)]">
+                {r.closedAt ? new Date(r.closedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
               </td>
             </tr>
           ))}
         </tbody>
       </table>
     </div>
-  </ChartCard>
-);
+  );
+};
+
+const EditorPerformanceTable = ({ editors }: PerformanceTableProps) => {
+  const [expanded, setExpanded] = useState<ExpandedCell>(null);
+  const editorSettings = useEditorSettingsStore((s) => s.settings);
+
+  const toggle = useCallback((editorId: string, col: 'onTime' | 'late') => {
+    const key: ExpandedCell = `${editorId}:${col}`;
+    setExpanded((prev) => (prev === key ? null : key));
+  }, []);
+
+  /** Chevron icon for expandable buttons */
+  const ChevronDown = ({ open }: { open: boolean }) => (
+    <svg
+      width="10" height="10" viewBox="0 0 10 10" fill="none"
+      className={`transition-transform ${open ? 'rotate-180' : ''}`}
+    >
+      <path d="M2 4L5 7L8 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+
+  return (
+    <ChartCard title="Editor Performance" icon={<TrendingUpIcon />}>
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-sm">
+          <thead>
+            <tr className="border-b-[2px] border-[var(--border-light)]">
+              <th className="pb-3 pr-4 font-bold text-xs uppercase tracking-wide text-[var(--text-secondary)]">Editor</th>
+              <th className="pb-3 px-4 text-center font-bold text-xs uppercase tracking-wide text-[var(--text-secondary)]">P1</th>
+              <th className="pb-3 px-4 text-center font-bold text-xs uppercase tracking-wide text-[var(--text-secondary)]">P2</th>
+              <th className="pb-3 px-4 text-center font-bold text-xs uppercase tracking-wide text-[var(--text-secondary)]">Active</th>
+              <th className="pb-3 px-4 text-center font-bold text-xs uppercase tracking-wide text-[var(--text-secondary)]">Re-Edit</th>
+              <th className="pb-3 px-4 text-center font-bold text-xs uppercase tracking-wide text-[var(--text-secondary)]">Done</th>
+              <th className="pb-3 px-4 text-center font-bold text-xs uppercase tracking-wide text-[var(--text-secondary)]">On-Time</th>
+              <th className="pb-3 pl-4 text-center font-bold text-xs uppercase tracking-wide text-[var(--text-secondary)]">Late</th>
+            </tr>
+          </thead>
+            {editors.map((editor) => {
+              const isOnTimeExpanded = expanded === `${editor.id}:onTime`;
+              const isLateExpanded = expanded === `${editor.id}:late`;
+              const hasExpanded = isOnTimeExpanded || isLateExpanded;
+
+              // P1/P2 from editor settings store (actual configured data)
+              const settings = editorSettings[editor.id];
+              const p1Category = settings ? SPECIALIZATION_TO_CATEGORY[settings.p1] : null;
+              const p2Category = settings ? SPECIALIZATION_TO_CATEGORY[settings.p2] : null;
+
+              return (
+                <tbody key={editor.id}>
+                  {/* Main data row */}
+                  <tr className="border-b-[2px] border-[var(--border-light)]">
+                    <td className="py-3.5 pr-4 font-medium text-[var(--text-primary)]">
+                      {editor.name.length > 20 ? editor.name.slice(0, 20) + '…' : editor.name}
+                    </td>
+                    <td className="py-3.5 px-4 text-center">
+                      <CategoryBadge category={p1Category} />
+                    </td>
+                    <td className="py-3.5 px-4 text-center">
+                      <CategoryBadge category={p2Category} />
+                    </td>
+                    <td className="py-3.5 px-4 text-center text-[var(--text-primary)]">
+                      {editor.active}
+                    </td>
+                    <td className="py-3.5 px-4 text-center">
+                      {editor.reEdit > 0 ? (
+                        <span className="inline-flex items-center justify-center rounded-full border-[1.5px] border-amber-300 bg-amber-50 px-2.5 py-0.5 text-xs font-bold text-amber-700">
+                          {editor.reEdit}
+                        </span>
+                      ) : (
+                        <span className="text-sm text-[var(--text-tertiary)]">0</span>
+                      )}
+                    </td>
+                    <td className="py-3.5 px-4 text-center text-[var(--text-primary)]">
+                      {editor.done}
+                    </td>
+                    <td className="py-3.5 px-4 text-center">
+                      <button
+                        type="button"
+                        onClick={() => toggle(editor.id, 'onTime')}
+                        disabled={editor.onTimeItems.length === 0}
+                        className={`
+                          inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors
+                          ${editor.onTimeItems.length > 0
+                            ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 cursor-pointer'
+                            : 'bg-gray-100 text-gray-400 cursor-default'
+                          }
+                          ${isOnTimeExpanded ? 'ring-2 ring-emerald-300' : ''}
+                        `}
+                        aria-expanded={isOnTimeExpanded}
+                        aria-label={`${editor.onTimeItems.length} on-time deliveries by ${editor.name}`}
+                      >
+                        {editor.onTimeItems.length}
+                        {editor.onTimeItems.length > 0 && <ChevronDown open={isOnTimeExpanded} />}
+                      </button>
+                    </td>
+                    <td className="py-3.5 pl-4 text-center">
+                      <button
+                        type="button"
+                        onClick={() => toggle(editor.id, 'late')}
+                        disabled={editor.lateItems.length === 0}
+                        className={`
+                          inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors
+                          ${editor.lateItems.length > 0
+                            ? 'bg-red-50 text-red-600 hover:bg-red-100 cursor-pointer'
+                            : 'bg-gray-100 text-gray-400 cursor-default'
+                          }
+                          ${isLateExpanded ? 'ring-2 ring-red-300' : ''}
+                        `}
+                        aria-expanded={isLateExpanded}
+                        aria-label={`${editor.lateItems.length} late deliveries by ${editor.name}`}
+                      >
+                        {editor.lateItems.length}
+                        {editor.lateItems.length > 0 && <ChevronDown open={isLateExpanded} />}
+                      </button>
+                    </td>
+                  </tr>
+
+                  {/* Expanded item list row */}
+                  {hasExpanded && (
+                    <tr className="border-b-[2px] border-[var(--border-light)]">
+                      <td colSpan={8} className="bg-[var(--background)] px-4 py-3">
+                        <p className="mb-2 text-xs font-semibold text-[var(--text-secondary)]">
+                          {isOnTimeExpanded ? 'On-Time Deliveries' : 'Late Deliveries'}
+                          <span className="ml-1 font-normal text-[var(--text-tertiary)]">
+                            ({isOnTimeExpanded ? editor.onTimeItems.length : editor.lateItems.length} items)
+                          </span>
+                        </p>
+                        <RequestItemList
+                          items={isOnTimeExpanded ? editor.onTimeItems : editor.lateItems}
+                        />
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              );
+            })}
+        </table>
+      </div>
+    </ChartCard>
+  );
+};
 
 // ============================================
 // 3. EDITOR PERFORMANCE DETAIL (tabbed)
@@ -487,12 +667,15 @@ const EditorPerformanceDetail = ({ editors }: PerformanceDetailProps) => {
             </>
           )}
         </div>
-        <div className="text-right">
-          <span className="text-sm text-[var(--text-secondary)]">Score: </span>
-          <span className="text-2xl font-bold text-[var(--text-primary)]">
-            {selected.score}
-          </span>
-          <span className="text-sm text-[var(--text-tertiary)]">/100</span>
+        <div className="flex items-center gap-4">
+          <div className="text-right">
+            <span className="text-xs text-[var(--text-tertiary)]">On-Time</span>
+            <p className="text-lg font-bold text-emerald-600">{selected.onTimeItems.length}</p>
+          </div>
+          <div className="text-right">
+            <span className="text-xs text-[var(--text-tertiary)]">Late</span>
+            <p className="text-lg font-bold text-red-500">{selected.lateItems.length}</p>
+          </div>
         </div>
       </div>
 
@@ -549,7 +732,7 @@ const EditorPerformanceDetail = ({ editors }: PerformanceDetailProps) => {
             {selected.specializations.map((spec) => (
               <div
                 key={spec.category}
-                className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--background)] p-4"
+                className="rounded-2xl border-[2px] border-[var(--border-light)] bg-[var(--background)] p-4"
               >
                 <div className="mb-3 flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -610,7 +793,7 @@ const StatMini = ({
   label: string;
   value: string;
 }) => (
-  <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--background)] px-4 py-3">
+  <div className="rounded-xl border-[2px] border-[var(--border-light)] bg-[var(--background)] px-4 py-3">
     <div className="mb-1 flex items-center gap-1.5 text-[var(--text-tertiary)]">
       {icon}
       <span className="text-xs">{label}</span>
@@ -655,64 +838,194 @@ const SpecMetric = ({
 );
 
 // ============================================
-// 4. EDITOR EFFICIENCY BY TYPE CHART
+// 4. EXTRA WORK BY EDITOR (scrollable cards)
 // ============================================
 
-interface EfficiencyChartProps {
+interface ExtraWorkProps {
   editors: EditorStats[];
+  requests: CreativeRequest[];
 }
 
-const EditorEfficiencyByType = ({ editors }: EfficiencyChartProps) => {
-  const data = useMemo(() => {
-    return editors
-      .filter((e) => Object.values(e.categoryBreakdown).some((v) => v > 0))
-      .map((e) => ({
-        name: e.name.length > 12 ? e.name.slice(0, 12) + '…' : e.name,
-        Design: e.categoryBreakdown.Design,
-        Video: e.categoryBreakdown.Video,
-        'UI/UX': e.categoryBreakdown['UI/UX'],
-      }));
-  }, [editors]);
+/** Arrow button for horizontal scroll */
+const ScrollArrow = ({ direction, onClick }: { direction: 'left' | 'right'; onClick: () => void }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-[2px] border-[var(--navy)] bg-[var(--surface)] text-[var(--text-secondary)] shadow-[2px_2px_0px_#1E293B] transition-all hover:bg-[var(--background)] hover:text-[var(--text-primary)] active:translate-x-[1px] active:translate-y-[1px] active:shadow-none"
+    aria-label={`Scroll ${direction}`}
+  >
+    <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+      {direction === 'left'
+        ? <polyline points="15 18 9 12 15 6" />
+        : <polyline points="9 6 15 12 9 18" />
+      }
+    </svg>
+  </button>
+);
 
-  if (data.length === 0) {
-    return (
-      <ChartCard title="Editor Efficiency by Type">
-        <p className="py-8 text-center text-sm text-[var(--text-tertiary)]">
-          No data available
-        </p>
-      </ChartCard>
-    );
-  }
+interface EditorWorkBreakdown {
+  editorId: string;
+  editorName: string;
+  p1Category: ContentCategory | null;
+  /** All categories with work, including P1 */
+  categories: { category: ContentCategory; count: number; isP1: boolean }[];
+  totalTasks: number;
+}
+
+const EditorExtraWorkChart = ({ editors, requests }: ExtraWorkProps) => {
+  const editorSettings = useEditorSettingsStore((s) => s.settings);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const data = useMemo((): EditorWorkBreakdown[] => {
+    return editors.map((editor) => {
+      const settings = editorSettings[editor.id];
+      const p1Category = settings ? SPECIALIZATION_TO_CATEGORY[settings.p1] : null;
+
+      // Count non-deleted assigned requests per category
+      const assigned = requests.filter(
+        (r) => r.assigneeId === editor.id && r.status !== 'deleted',
+      );
+      const catCounts: Partial<Record<ContentCategory, number>> = {};
+      for (const r of assigned) {
+        const cat = TYPE_TO_CATEGORY[r.type];
+        catCounts[cat] = (catCounts[cat] ?? 0) + 1;
+      }
+
+      // All categories with count > 0, P1 first then extras
+      const categories = CONTENT_CATEGORIES
+        .filter((cat) => (catCounts[cat] ?? 0) > 0)
+        .map((cat) => ({
+          category: cat,
+          count: catCounts[cat]!,
+          isP1: cat === p1Category,
+        }))
+        .sort((a, b) => {
+          // P1 first, then by count descending
+          if (a.isP1 && !b.isP1) return -1;
+          if (!a.isP1 && b.isP1) return 1;
+          return b.count - a.count;
+        });
+
+      return {
+        editorId: editor.id,
+        editorName: editor.name,
+        p1Category,
+        categories,
+        totalTasks: assigned.length,
+      };
+    });
+  }, [editors, requests, editorSettings]);
+
+  const scroll = useCallback((dir: 'left' | 'right') => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollBy({ left: dir === 'left' ? -300 : 300, behavior: 'smooth' });
+  }, []);
 
   return (
-    <ChartCard title="Editor Efficiency by Type">
-      <ResponsiveContainer width="100%" height={320}>
-        <BarChart data={data} margin={{ top: 0, right: 20, left: 0, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-          <XAxis
-            dataKey="name"
-            tick={{ fill: 'var(--text-tertiary)', fontSize: 12 }}
-            interval={0}
-          />
-          <YAxis tick={{ fill: 'var(--text-tertiary)', fontSize: 12 }} />
-          <Tooltip
-            contentStyle={{
-              backgroundColor: 'var(--surface)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-md)',
-              fontSize: 13,
-            }}
-          />
-          <Legend
-            verticalAlign="bottom"
-            iconType="square"
-            wrapperStyle={{ fontSize: 12, paddingTop: 16 }}
-          />
-          <Bar dataKey="Design" fill={CATEGORY_COLORS.Design} radius={[2, 2, 0, 0]} />
-          <Bar dataKey="Video" fill={CATEGORY_COLORS.Video} radius={[2, 2, 0, 0]} />
-          <Bar dataKey="UI/UX" fill={CATEGORY_COLORS['UI/UX']} radius={[2, 2, 0, 0]} />
-        </BarChart>
-      </ResponsiveContainer>
+    <ChartCard title="Work Breakdown by Editor">
+      <p className="mb-4 text-xs text-[var(--text-tertiary)]">
+        All assigned work per editor by category. P1 tasks are marked. Deleted cards excluded.
+      </p>
+
+      {/* Scroll controls + cards */}
+      <div className="flex items-center gap-2">
+        <ScrollArrow direction="left" onClick={() => scroll('left')} />
+
+        <div
+          ref={scrollRef}
+          className="flex gap-4 overflow-x-auto scroll-smooth py-1"
+          style={{ scrollbarWidth: 'thin' }}
+        >
+          {data.map((editor) => {
+            const maxCount = editor.categories.length > 0
+              ? Math.max(...editor.categories.map((c) => c.count))
+              : 0;
+
+            return (
+              <div
+                key={editor.editorId}
+                className="flex w-72 shrink-0 flex-col rounded-2xl border-[2.5px] border-[var(--navy)] bg-[var(--background)] p-4 shadow-[var(--shadow-xs)]"
+              >
+                {/* Editor name + P1 label */}
+                <div className="mb-3 flex items-center justify-between">
+                  <span className="text-sm font-semibold text-[var(--text-primary)]">
+                    {editor.editorName.length > 16 ? editor.editorName.slice(0, 16) + '…' : editor.editorName}
+                  </span>
+                  {editor.p1Category && (
+                    <span className="rounded-[var(--radius-sm)] bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-tertiary)]">
+                      P1: {editor.p1Category}
+                    </span>
+                  )}
+                </div>
+
+                {/* Category bars */}
+                {editor.categories.length > 0 ? (
+                  <div className="space-y-2.5">
+                    {editor.categories.map(({ category, count, isP1 }) => {
+                      const pct = maxCount > 0 ? (count / maxCount) * 100 : 0;
+
+                      return (
+                        <div key={category}>
+                          <div className="mb-1 flex items-center justify-between">
+                            <div className="flex items-center gap-1.5">
+                              <span
+                                className="inline-block h-2.5 w-2.5 rounded-sm"
+                                style={{ backgroundColor: CATEGORY_COLORS[category] }}
+                              />
+                              <span className="text-xs text-[var(--text-secondary)]">{category}</span>
+                              {isP1 && (
+                                <span className="rounded bg-gray-200 px-1 py-px text-[9px] font-bold text-[var(--text-tertiary)]">
+                                  P1
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-xs font-semibold text-[var(--text-primary)]">{count}</span>
+                          </div>
+                          <div className="h-2 w-full overflow-hidden rounded-full bg-gray-100">
+                            <div
+                              className="h-full rounded-full transition-all"
+                              style={{
+                                width: `${pct}%`,
+                                backgroundColor: CATEGORY_COLORS[category],
+                              }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="py-4 text-center text-xs text-[var(--text-tertiary)]">No tasks assigned</p>
+                )}
+
+                {/* Total */}
+                <div className="mt-3 flex items-center justify-between border-t border-[var(--border)] pt-2">
+                  <span className="text-xs text-[var(--text-tertiary)]">Total tasks</span>
+                  <span className="text-xs font-semibold text-[var(--text-primary)]">
+                    {editor.totalTasks}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <ScrollArrow direction="right" onClick={() => scroll('right')} />
+      </div>
+
+      {/* Legend */}
+      <div className="mt-4 flex flex-wrap gap-3">
+        {CONTENT_CATEGORIES.map((cat) => (
+          <div key={cat} className="flex items-center gap-1.5">
+            <span
+              className="inline-block h-2.5 w-2.5 rounded-sm"
+              style={{ backgroundColor: CATEGORY_COLORS[cat] }}
+            />
+            <span className="text-xs text-[var(--text-tertiary)]">{cat}</span>
+          </div>
+        ))}
+      </div>
     </ChartCard>
   );
 };
@@ -730,9 +1043,32 @@ export const DashboardEditorPerformance = ({
   requests,
   members,
 }: DashboardEditorPerformanceProps) => {
+  const memberActivity = useTeamStore((s) => s.memberActivity);
+  const isInactive = useTeamStore((s) => s.isInactive);
+
+  // Include editors + admins/owners with preserveMetrics (promoted editors who keep their data)
+  const metricsMembers = useMemo(
+    () => members.filter((m) => {
+      // Always include editors
+      if (m.role === 'editor') {
+        // But hide if inactive for 20+ days with no task assignment
+        return !isInactive(m.id);
+      }
+      // Include admins/owners only if they have preserveMetrics flag (former editors)
+      if (m.role === 'admin' || m.role === 'owner') {
+        const activity = memberActivity[m.id];
+        if (activity?.preserveMetrics) {
+          return !isInactive(m.id);
+        }
+      }
+      return false;
+    }),
+    [members, memberActivity, isInactive],
+  );
+
   const editors = useMemo(
-    () => computeEditorStats(members, requests),
-    [members, requests],
+    () => computeEditorStats(metricsMembers, requests),
+    [metricsMembers, requests],
   );
 
   return (
@@ -743,11 +1079,8 @@ export const DashboardEditorPerformance = ({
       {/* Row 2: Editor Performance Table */}
       <EditorPerformanceTable editors={editors} />
 
-      {/* Row 3: Editor Performance Detail */}
-      <EditorPerformanceDetail editors={editors} />
-
       {/* Row 4: Efficiency by Type */}
-      <EditorEfficiencyByType editors={editors} />
+      <EditorExtraWorkChart editors={editors} requests={requests} />
     </div>
   );
 };

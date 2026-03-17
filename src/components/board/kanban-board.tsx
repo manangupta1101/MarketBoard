@@ -19,7 +19,18 @@ export const KanbanBoard = ({ requests, onCardClick }: KanbanBoardProps) => {
   );
 
   return (
-    <div className="flex gap-4 overflow-x-auto pb-4">
+    <div className="
+      flex gap-5 pb-4
+      overflow-x-auto
+      snap-x snap-mandatory
+      md:snap-none
+      -mx-4 px-4 md:mx-0 md:px-0
+      scroll-smooth
+      [&::-webkit-scrollbar]:h-2
+      [&::-webkit-scrollbar-thumb]:rounded-full
+      [&::-webkit-scrollbar-thumb]:bg-[var(--border-light)]
+      [-webkit-overflow-scrolling:touch]
+    ">
       {REQUEST_STATUS_ORDER.map((status) => (
         <KanbanColumn
           key={status}
